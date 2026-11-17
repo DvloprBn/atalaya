@@ -1,0 +1,53 @@
+# Contrato de la API de Atalaya. Se escribe ANTES que el código y manda sobre él:
+# - el frontend genera sus tipos de aquí (web: npm run contract:types);
+# - el gemelo en Django (después de v1.0) tendrá que cumplir exactamente este archivo.
+openapi: 3.1.0
+info:
+  title: Atalaya API
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Estado de la base, Redis y el worker
+      description: Público. Solo devuelve estados; nunca mensajes de error, hosts ni versiones.
+      security: []
+      responses:
+        "200":
+          description: Todo responde
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReport" }
+        "503":
+          description: Al menos una pieza no responde
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReport" }
+        "429":
+          description: Se superó el tope de peticiones
+components:
+  schemas:
+    CheckState:
+      type: string
+      enum: [ok, down]
+    HealthReport:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        checks:
+          type: object
+          additionalProperties: false
+          required: [database, redis, worker]
+          properties:
+            database: { $ref: "#/components/schemas/CheckState" }
+            redis: { $ref: "#/components/schemas/CheckState" }
+            worker: { $ref: "#/components/schemas/CheckState" }

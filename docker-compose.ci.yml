@@ -1,0 +1,10 @@
+# Ajuste para el CI (se combina con docker-compose.yml):
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+# En el CI NO se monta el código: se usa el que se copió a la imagen. Con el código
+# montado, el usuario del runner (uid 1001) es dueño de los archivos y el contenedor
+# (uid 1000) no podría escribir el cliente de Prisma ni compilar.
+services:
+  api:
+    volumes: !reset []
+  web:
+    volumes: !reset []

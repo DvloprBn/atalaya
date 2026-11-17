@@ -1,0 +1,89 @@
+# CI de Atalaya: cada push y cada PR pasan por aquí antes de fusionarse.
+# Las acciones van fijadas por SHA de commit (no por etiqueta): una etiqueta se
+# puede mover a código malicioso; un SHA no (ataque a la cadena de suministro).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read            # el CI solo lee el repo; no puede escribir nada
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0 }   # toda la historia: un secreto borrado sigue en commits viejos
+      - run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git --redact --no-banner /repo
+
+  api:
+    name: API (NestJS)
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: api } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24 }
+      - run: npm ci --no-fund
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev
+
+  web:
+    name: Web (Next.js)
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: web } }
+    env: { NEXT_TELEMETRY_DISABLED: "1" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24 }
+      - run: npm ci --no-fund
+      - name: Los tipos coinciden con el contrato
+        run: npm run contract:types && git diff --exit-code src/lib/api-schema.d.ts
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm audit --omit=dev
+
+  worker:
+    name: Worker (Python)
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: worker } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: pip install uv==0.13.9
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - run: uv run pip-audit
+
+  e2e:
+    name: Sistema completo (Docker + prueba de humo)
+    needs: [api, web, worker]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: .env de un solo uso con contraseñas aleatorias
+        run: |
+          sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
+              -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 24)/" .env.example > .env
+      - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+      - name: Esperar a que todo responda
+        run: timeout 180 bash -c 'until curl -fs http://127.0.0.1:3070/api/health; do sleep 3; done'
+      - run: ./scripts/smoke.sh
+      - if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail 100
+      - if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v

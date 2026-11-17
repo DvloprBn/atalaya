@@ -1,0 +1,14 @@
+// Schema de Atalaya. En v0.1 todavía no hay tablas: la primera migración
+// (usuarios y roles) llega en v0.2. La API ya habla con PostgreSQL desde hoy
+// para que /api/health demuestre la conexión de punta a punta.
+
+generator client {
+  provider     = "prisma-client"
+  // Dentro de src/: Nest 12 exige que todo lo compilado viva bajo sourceRoot.
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
