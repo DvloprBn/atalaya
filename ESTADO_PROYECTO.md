@@ -9,16 +9,14 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.4` (interfaz «Observatorio»), **construida y verificada** en la rama `fase/v0.4-interfaz`. **Sin comitear.** `v0.1`, `v0.2` y `v0.3` cerradas (etiqueta `v0.3` en `073fe40`, PR #3, CI 5/5).
+**Fase actual:** `v0.4` **cerrada** (etiqueta `v0.4` = commit de fusión `e402831`, PR #4, CI 5/5). Siguiente: `v0.5` (2FA con TOTP y códigos de recuperación) en la rama `fase/v0.5-2fa`.
 
-**Qué hay en v0.4 (verificado el 2026-11-17):**
-- Dirección A «Observatorio» elegida por el dueño entre tres (en un lienzo de diseño privado del dueño). Interfaz entra como fase propia; las siguientes se recorren una posición (2FA = v0.5).
-- Tokens en `globals.css`, fuentes con `next/font` (servidas por el sitio), componentes de marca, radar y marcos; las 9 pantallas rehechas. Revisadas con capturas en Chrome (escritorio y 390 px).
-- Pruebas en Chrome real: 6/6 (las 3 anteriores + sin terceros, sin desborde en teléfono y movimiento reducido). La de terceros se validó con una falla plantada.
+**Qué hay hasta v0.4 (verificado el 2026-11-17):**
+- Esqueleto (v0.1), acceso completo (v0.2) y roles con jerarquía y admin de cuentas (v0.3).
+- Interfaz «Observatorio» (v0.4) en las 9 pantallas, con fuentes servidas por el propio sitio.
+- Pruebas: unitarias 82 · ataques e2e 16 · Chrome 6 · smoke 23 · worker 2. **CI 5/5 en GitHub.**
 
-**Siguiente paso:**
-1. Revisa la interfaz en http://localhost:3070 y pide el commit de v0.4 → PR, CI, fusión y etiqueta.
-2. Arranca `v0.5` (2FA).
+**Siguiente paso:** v0.5. Primero el contrato (activar, confirmar y desactivar 2FA; segundo paso del login). Ver `PENDIENTES.md` → «Siguiente fase».
 
 **Bloqueos:** ninguno.
 
@@ -26,6 +24,7 @@
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | PR #4 fusionado con el CI 5/5; etiqueta `v0.4` en `e402831`. v0.4 cerrada. El enlace del lienzo de diseño se retiró de la rama antes del PR (reescrita con permiso del dueño). |
 | 2026-11-17 | PR #3 fusionado con el CI 5/5; etiqueta `v0.3` en `073fe40`. v0.3 cerrada. |
 | 2026-11-17 | v0.4 construida y verificada (sin comitear): interfaz «Observatorio» en todas las pantallas, 3 pruebas nuevas de interfaz. PR #3 (v0.3) con CI 5/5, pendiente de fusionar. |
 | 2026-11-17 | v0.3 construida y verificada (sin comitear): jerarquía, admin de cuentas, invitaciones, inventario de rutas; laboratorio de 9 ataques y capítulo v0.3. |
