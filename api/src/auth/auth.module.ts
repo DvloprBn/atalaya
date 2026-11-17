@@ -4,6 +4,7 @@ import { loadEnv } from '../config/env.js';
 import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
+import { InvitationsService } from './invitations.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { RateLimits } from './rate-limits.js';
 import { RegistrationService } from './registration.service.js';
@@ -22,7 +23,7 @@ const JWT = { issuer: 'atalaya-api', audience: 'atalaya-web' };
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, RegistrationService, PasswordResetService, SessionsService, RateLimits, AuthGuard],
-  exports: [AuthGuard, JwtModule],
+  providers: [AuthService, RegistrationService, PasswordResetService, InvitationsService, SessionsService, RateLimits, AuthGuard],
+  exports: [AuthGuard, JwtModule, InvitationsService, SessionsService],
 })
 export class AuthModule {}

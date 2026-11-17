@@ -12,7 +12,7 @@ const ACCESS_TTL_S = 10 * 60;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // vida absoluta de una sesión
 const REUSE_GRACE_MS = 10_000;
 
-export type RevokeReason = 'logout' | 'password_reset' | 'reuse_detected';
+export type RevokeReason = 'logout' | 'password_reset' | 'reuse_detected' | 'account_disabled';
 
 export interface AccessClaims {
   sub: string; // id del usuario

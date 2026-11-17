@@ -30,7 +30,7 @@ model User {
   id              String    @id @default(uuid(7)) @db.Uuid
   /// Siempre en minúsculas (lo exige un CHECK en la base).
   email           String    @unique @db.VarChar(254)
-  /// Argon2id. Será null en cuentas que solo entran con Google (v0.5).
+  /// Argon2id. null mientras una invitación no se acepta (y en cuentas que solo entran con Google, v0.5).
   passwordHash    String?   @map("password_hash")
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
   roleId          Int       @map("role_id")
@@ -56,7 +56,7 @@ model Session {
   /// Vida absoluta: pasada esta fecha hay que volver a escribir la contraseña.
   expiresAt     DateTime       @map("expires_at") @db.Timestamptz(3)
   revokedAt     DateTime?      @map("revoked_at") @db.Timestamptz(3)
-  /// logout | password_reset | reuse_detected (CHECK en la base).
+  /// logout | password_reset | reuse_detected | account_disabled (CHECK en la base).
   revokedReason String?        @map("revoked_reason") @db.VarChar(32)
   refreshTokens RefreshToken[]
 
@@ -82,6 +82,8 @@ model RefreshToken {
 enum EmailTokenPurpose {
   register
   password_reset
+  /// Cuenta creada por el admin: la persona elige su contraseña con este enlace (v0.3).
+  invite
 
   @@map("email_token_purpose")
 }
@@ -92,7 +94,7 @@ model EmailToken {
   id           String            @id @default(uuid(7)) @db.Uuid
   purpose      EmailTokenPurpose
   email        String            @db.VarChar(254)
-  /// Solo en password_reset (en registro el usuario todavía no existe).
+  /// En password_reset e invite (en registro el usuario todavía no existe).
   userId       String?           @map("user_id") @db.Uuid
   user         User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Solo en register: la contraseña elegida, ya en hash. Se copia al usuario al verificar.

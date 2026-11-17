@@ -63,6 +63,9 @@ export class PasswordResetService {
       });
       if (claimed.count !== 1) return false;
       await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      // Abrir este enlace prueba que la persona lee ese buzón: si la cuenta era una
+      // invitación sin aceptar, queda verificada (sin pisar una fecha anterior).
+      await tx.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: now } });
       // Quien tuviera la contraseña vieja (y su sesión) queda fuera AL INSTANTE: el
       // guard revisa la sesión en cada petición, no solo al renovar.
       await this.sessions.revokeAllForUser(userId, 'password_reset', tx);

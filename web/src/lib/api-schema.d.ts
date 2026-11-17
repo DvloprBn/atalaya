@@ -173,6 +173,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/accept-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Usa el enlace de invitación, elige contraseña y activa la cuenta (un solo uso) */
+        post: operations["acceptInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Roles que quien pregunta puede asignar (los de nivel menor al suyo)
+         * @description Exige nivel admin (3) o más; si no, 403.
+         */
+        get: operations["adminRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuentas de nivel menor al de quien pregunta (20 por página) */
+        get: operations["adminListUsers"];
+        put?: never;
+        /**
+         * Crea una cuenta sin contraseña y le manda una invitación
+         * @description El rol debe ser de nivel menor al de quien crea. Director y super, máximo uno activo.
+         */
+        post: operations["adminCreateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /** Una cuenta (404 si no existe O si está a tu nivel o arriba) */
+        get: operations["adminGetUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Cambia el rol; el actual y el nuevo deben estar por debajo de quien cambia */
+        patch: operations["adminChangeRole"];
+        trace?: never;
+    };
+    "/admin/users/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desactiva la cuenta y cierra todas sus sesiones al instante */
+        post: operations["adminDisableUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactiva la cuenta (sus sesiones viejas no reviven) */
+        post: operations["adminEnableUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -218,6 +352,38 @@ export interface components {
         LoginResponse: {
             user: components["schemas"]["PublicUser"];
         };
+        /** @enum {string} */
+        RoleName: "usuario" | "staff" | "manager" | "admin" | "director" | "super";
+        AssignableRole: {
+            name: components["schemas"]["RoleName"];
+            level: number;
+            /** @description Cuentas activas permitidas (null = sin límite) */
+            maxCount: number | null;
+        };
+        CreateUserRequest: {
+            email: components["schemas"]["Email"];
+            roleName: components["schemas"]["RoleName"];
+        };
+        ChangeRoleRequest: {
+            roleName: components["schemas"]["RoleName"];
+        };
+        AdminUser: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            role: components["schemas"]["Role"];
+            /** @enum {string} */
+            status: "active" | "invited" | "disabled";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminUserPage: {
+            items: components["schemas"]["AdminUser"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
         Message: {
             message: string;
         };
@@ -239,6 +405,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description La cuenta, como la ve el admin */
+        AdminUser: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdminUser"];
+            };
+        };
         /** @description Aceptado. El resultado real se le cuenta al dueño del correo, por correo. */
         CheckYourEmail: {
             headers: {
@@ -267,7 +442,9 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        UserId: string;
+    };
     requestBodies: {
         Register: {
             content: {
@@ -467,6 +644,159 @@ export interface operations {
         responses: {
             200: components["responses"]["Message"];
             400: components["responses"]["Error"];
+        };
+    };
+    acceptInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+        };
+    };
+    adminRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles asignables */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignableRole"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminListUsers: {
+        parameters: {
+            query?: {
+                /** @description Parte del correo */
+                q?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de cuentas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["AdminUser"];
+            400: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    adminGetUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminUser"];
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    adminChangeRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRoleRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AdminUser"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    adminDisableUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminUser"];
+            404: components["responses"]["Error"];
+        };
+    };
+    adminEnableUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminUser"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
 }

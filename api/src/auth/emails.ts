@@ -42,6 +42,20 @@ export function resetPassword(url: string): EmailContent {
   };
 }
 
+export function invitation(url: string, roleName: string): EmailContent {
+  return {
+    subject: 'Te crearon una cuenta en Atalaya',
+    title: 'Te crearon una cuenta',
+    paragraphs: [
+      `Una persona del equipo de Atalaya te creó una cuenta con el rol «${roleName}».`,
+      'Para activarla, elige tu contraseña con el enlace de abajo. Vence en 72 horas.',
+      'Si no esperabas esta invitación, ignora este correo: la cuenta no se activa sin ti.',
+      STUDY,
+    ],
+    action: { label: 'Elegir mi contraseña', url },
+  };
+}
+
 /** Restablecer con un correo SIN cuenta: también recibe un correo (misma respuesta, mismo trabajo). */
 export function noAccountForReset(registerUrl: string): EmailContent {
   return {

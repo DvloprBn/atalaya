@@ -6,6 +6,7 @@ import { AuthService, type PublicUser } from './auth.service.js';
 import { clearSessionCookies, REFRESH_COOKIE, setSessionCookies } from './cookies.js';
 import { type AuthUser, CurrentUser } from './current-user.decorator.js';
 import { EmailDto, LoginDto, RegisterDto, ResetPasswordDto, TokenDto } from './dto.js';
+import { InvitationsService } from './invitations.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionsService } from './sessions.service.js';
@@ -25,6 +26,7 @@ export class AuthController {
     private readonly registration: RegistrationService,
     private readonly passwordReset: PasswordResetService,
     private readonly sessions: SessionsService,
+    private readonly invitations: InvitationsService,
   ) {}
 
   @Public()
@@ -45,8 +47,11 @@ export class AuthController {
     return { message: 'Correo confirmado. Ya puedes iniciar sesión.' };
   }
 
+  // 20 por minuto por IP: varias personas pueden compartir una IP (una oficina, la red
+  // del celular). La defensa fuerte contra adivinar contraseñas es el tope POR CUENTA
+  // (10 fallos en 15 min, rate-limits.ts), que no depende de la IP.
   @Public()
-  @Throttle({ default: { limit: 10, ttl: MIN } })
+  @Throttle({ default: { limit: 20, ttl: MIN } })
   @Post('login')
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response): Promise<{ user: PublicUser }> {
@@ -102,5 +107,16 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     if (!(await this.passwordReset.reset(dto.token, dto.password))) throw new BadRequestException(INVALID_LINK);
     return { message: 'Contraseña actualizada. Se cerraron todas tus sesiones; vuelve a entrar.' };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 15 * MIN } })
+  @Post('accept-invite')
+  @HttpCode(200)
+  async acceptInvite(@Body() dto: ResetPasswordDto) {
+    const result = await this.invitations.accept(dto.token, dto.password);
+    if (result === 'password-contains-email') throw new BadRequestException('La contraseña no puede contener tu correo');
+    if (!result) throw new BadRequestException(INVALID_LINK);
+    return { message: 'Cuenta activada. Ya puedes iniciar sesión.' };
   }
 }

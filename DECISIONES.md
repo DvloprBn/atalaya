@@ -38,4 +38,17 @@
 - **CSRF:** `SameSite=Strict` + guarda de `Sec-Fetch-Site`/`Origin` en toda petición que cambia algo.
 - **Contraseñas:** Argon2id (19 MiB, t=2, p=1), de 12 a 128 caracteres y sin la parte local del correo; sin reglas de composición (NIST 800-63B).
 - **Pruebas por capas:** unitarias (vitest), ataques contra la API viva con Mailpit (vitest e2e) y el recorrido en Chrome real (Playwright con `channel: 'chrome'`, sin descargar navegadores). Cada suite se validó con una falla plantada.
+- Login: tope por IP de 20 por minuto (antes 10): varias personas comparten IP (oficina, red del celular); la defensa principal contra adivinar contraseñas es el tope por cuenta.
 - En CI la migración y la semilla son pasos explícitos (`prisma migrate deploy`, `db seed`); la API no migra sola al arrancar (lección 146).
+
+## 2026-11-17 — v0.3 (diseño de Claude, dentro de lo aprobado)
+- **Jerarquía estricta:** solo se ve y se gestiona lo de nivel menor al propio; nadie se gestiona a sí mismo. La regla vive en `admin/hierarchy.ts` (en memoria y como filtro de Prisma, con una prueba que exige que coincidan).
+- **Dos capas:** `@MinLevel` + `RolesGuard` para la función (403) y la jerarquía para los objetos (404, para no confirmar que existen).
+- **El panel de cuentas exige nivel admin (3).** Staff y manager no tienen panel todavía.
+- **Alta de personal por invitación:** la cuenta nace sin contraseña y la persona la elige con un enlace de 72 h; nadie más conoce su contraseña. Aceptar verifica el correo (lección 45). Restablecer también verifica una invitación pendiente.
+- **Tope de cuentas activas por rol** (1 director, 1 super) con candado sobre la fila del rol; las desactivadas no cuentan; reactivar revisa el tope.
+- **Desactivar revoca todas las sesiones** (motivo `account_disabled`); reactivar no las revive.
+- **Cambios con candado de fila** (`FOR UPDATE`) y revisión de jerarquía con el dato bloqueado.
+- **Roles por nombre en la API**, nunca por id. Sin borrado de cuentas: se desactivan.
+- **Inventario de rutas contra el contrato** como prueba unitaria: rutas iguales y públicas iguales.
+

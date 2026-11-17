@@ -9,26 +9,28 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.2` (registro, verificación, login, sesiones, logout y restablecer contraseña), **construida y verificada** en la rama `fase/v0.2-registro-login`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.1). `v0.1` cerrada (etiqueta en `a214a5a`).
+**Fase actual:** `v0.3` (6 roles con jerarquía, panel `/admin`, invitaciones), **construida y verificada** en la rama `fase/v0.3-roles-admin`. **Sin comitear** el trabajo de la fase. `v0.1` y `v0.2` cerradas (etiquetas en `a214a5a` y `24da658`).
 
 **Qué funciona (verificado el 2026-11-17 contra el sistema vivo):**
-- Migración `auth`: 6 tablas, 6 roles fijos y CHECKs; cada CHECK probado bloqueando (y 2 filas válidas aceptadas). Uno estaba mal (`NULL IN` deja pasar) y se corrigió antes de publicar la migración.
-- API: 8 rutas en `/api/auth`, correos por bandeja de salida a Mailpit; la bandeja queda con 0 bytes de cuerpo y 0 tokens tras enviar.
-- Pruebas: unitarias api 32/32 · ataques e2e 9/9 · Chrome real 1/1 · smoke 23/23 · worker 2/2. Las suites e2e y de navegador se validaron con **fallas plantadas** (3/9 y 1/1 cayeron donde debían).
-- Login: tiempos iguales para cuenta existente e inexistente (≈30 ms ambas).
-- Simulación completa del trabajo e2e del CI en local con base nueva: todo en verde.
+- Migración `admin`: propósito `invite` y motivo `account_disabled`, con CHECKs probados (escritos sin nombrar el valor nuevo del enum: Postgres no deja usarlo en la misma transacción).
+- API: 7 rutas `/api/admin/*` (nivel admin o más) + `accept-invite`. Jerarquía estricta (404 para lo de arriba), candado de fila en cada cambio, tope de 1 director y 1 super con candado de rol, desactivar revoca sesiones.
+- Pruebas: unitarias 82 (incluye las 36 combinaciones de la jerarquía y el inventario de rutas contra el contrato) · ataques e2e 16 (9 de acceso + 7 de admin, incluida la carrera por el puesto de director) · Chrome real 3 · smoke 23 · worker 2.
+- Fallas plantadas: la regla `<` → `<=` hizo caer 10 unitarias y la de escalada e2e; reveló que la regla estaba duplicada y se unificó. El inventario de rutas falló al escribirse (faltaban las 8 rutas en el contrato) y pasó al completarlo.
+- Simulación del CI con base nueva: todo en verde.
 
 **Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.2 y `docs/laboratorio/v0.2-acceso.md`) y pide el commit.
-2. Push de la rama, PR, CI y fusión; etiqueta `v0.2`.
-3. Arranca `v0.3` (6 roles con jerarquía y admin de usuarios).
+1. El dueño revisa (guía capítulo v0.3 y `docs/laboratorio/v0.3-roles.md`) y pide el commit.
+2. Push, PR, CI, fusión y etiqueta `v0.3`.
+3. Arranca `v0.4` (2FA con TOTP y códigos de recuperación).
 
-**Bloqueos:** ninguno. La suite e2e solo cabe una vez cada 15 min por los topes (ver `PENDIENTES.md` S-6).
+**Bloqueos:** ninguno.
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | v0.3 construida y verificada (sin comitear): jerarquía, admin de cuentas, invitaciones, inventario de rutas; laboratorio de 9 ataques y capítulo v0.3. |
+| 2026-11-17 | PR #2 fusionado con el CI 5/5 (incluidas las suites e2e y de Chrome en GitHub); etiqueta `v0.2` en `24da658`. v0.2 cerrada. |
 | 2026-11-17 | v0.2 construida y verificada (sin comitear): acceso completo, 3 suites de pruebas validadas con fallas plantadas, laboratorio de 10 ataques y capítulo v0.2 de la guía. |
 | 2026-11-17 | PR #1 fusionado por el dueño con el CI 5/5; etiqueta `v0.1` en `a214a5a`. v0.1 cerrada. |
 | 2026-11-17 | Repo público `DvloprBn/atalaya` creado por el dueño; subidas `main` (base vacía) y `fase/v0.1-esqueleto` tras escanear toda la historia. |

@@ -23,6 +23,10 @@ export class Browser {
     return this.request('GET', path);
   }
 
+  async patch(path: string, body: unknown): Promise<ApiResponse> {
+    return this.request('PATCH', path, body);
+  }
+
   /** Copia de las cookies de este momento (para "robarlas" en las pruebas). */
   snapshot(): Map<string, string> {
     return new Map(this.cookies);

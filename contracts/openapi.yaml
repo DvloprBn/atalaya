@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.2.0
+  version: 0.3.0
   license:
     name: MIT
     identifier: MIT
@@ -131,7 +131,116 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "400": { $ref: "#/components/responses/Error" }
+  /auth/accept-invite:
+    post:
+      operationId: acceptInvite
+      summary: Usa el enlace de invitación, elige contraseña y activa la cuenta (un solo uso)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
+  /admin/roles:
+    get:
+      operationId: adminRoles
+      summary: Roles que quien pregunta puede asignar (los de nivel menor al suyo)
+      description: Exige nivel admin (3) o más; si no, 403.
+      responses:
+        "200":
+          description: Roles asignables
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AssignableRole" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      summary: Cuentas de nivel menor al de quien pregunta (20 por página)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 100 }, description: Parte del correo }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de cuentas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUserPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: adminCreateUser
+      summary: Crea una cuenta sin contraseña y le manda una invitación
+      description: El rol debe ser de nivel menor al de quien crea. Director y super, máximo uno activo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminUser" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /admin/users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      operationId: adminGetUser
+      summary: Una cuenta (404 si no existe O si está a tu nivel o arriba)
+      responses:
+        "200": { $ref: "#/components/responses/AdminUser" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/users/{id}/role:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      operationId: adminChangeRole
+      summary: Cambia el rol; el actual y el nuevo deben estar por debajo de quien cambia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangeRoleRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminUser" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /admin/users/{id}/disable:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: adminDisableUser
+      summary: Desactiva la cuenta y cierra todas sus sesiones al instante
+      responses:
+        "200": { $ref: "#/components/responses/AdminUser" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/users/{id}/enable:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: adminEnableUser
+      summary: Reactiva la cuenta (sus sesiones viejas no reviven)
+      responses:
+        "200": { $ref: "#/components/responses/AdminUser" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 components:
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
   securitySchemes:
     accessCookie:
       type: apiKey
@@ -149,6 +258,11 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/TokenRequest" }
   responses:
+    AdminUser:
+      description: La cuenta, como la ve el admin
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminUser" }
     CheckYourEmail:
       description: Aceptado. El resultado real se le cuenta al dueño del correo, por correo.
       content:
@@ -232,6 +346,49 @@ components:
       required: [user]
       properties:
         user: { $ref: "#/components/schemas/PublicUser" }
+    RoleName:
+      type: string
+      enum: [usuario, staff, manager, admin, director, super]
+    AssignableRole:
+      type: object
+      additionalProperties: false
+      required: [name, level, maxCount]
+      properties:
+        name: { $ref: "#/components/schemas/RoleName" }
+        level: { type: integer, minimum: 0, maximum: 5 }
+        maxCount: { type: [integer, "null"], description: "Cuentas activas permitidas (null = sin límite)" }
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [email, roleName]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        roleName: { $ref: "#/components/schemas/RoleName" }
+    ChangeRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [roleName]
+      properties:
+        roleName: { $ref: "#/components/schemas/RoleName" }
+    AdminUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, role, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { type: string, enum: [active, invited, disabled] }
+        createdAt: { type: string, format: date-time }
+    AdminUserPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
     Message:
       type: object
       additionalProperties: false
