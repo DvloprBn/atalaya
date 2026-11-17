@@ -18,7 +18,6 @@
 | Id | Qué | Quién | Cuándo |
 |---|---|---|---|
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
-| H-2 | Crear el repo público en GitHub (`gh` no está instalado) y hacer el primer push para que corra el CI. | Dueño | Al aprobar v0.1 |
 
 ## Siguiente fase (v0.2)
 - Escribir en el contrato las rutas de registro, verificación, login, refresh y logout; agregar Mailpit a compose.
