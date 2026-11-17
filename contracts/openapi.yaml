@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.5.0
+  version: 0.6.0
   license:
     name: MIT
     identifier: MIT
@@ -150,6 +150,7 @@ paths:
       summary: Empieza a activar el 2FA (pide la contraseña); devuelve el secreto y el QR
       description: |
         Re-autentica con la contraseña: una sesión robada no puede enlazar el autenticador del atacante.
+        409 también si la cuenta entra solo con Google y todavía no tiene contraseña.
         El 2FA no queda activo hasta confirmarlo con un código en `/auth/2fa/enable`.
       requestBody:
         required: true
@@ -191,6 +192,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /auth/2fa/recovery-codes:
     post:
       operationId: twoFactorNewRecoveryCodes
@@ -203,6 +205,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/RecoveryCodes" }
         "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /auth/2fa/verify:
     post:
       operationId: twoFactorVerify
@@ -225,6 +228,54 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+  /auth/providers:
+    get:
+      operationId: authProviders
+      summary: Qué formas de entrar con una cuenta externa están configuradas
+      description: Público. La pantalla de entrada lo consulta para saber si muestra «Continuar con Google».
+      security: []
+      responses:
+        "200":
+          description: Proveedores disponibles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Providers" }
+  /auth/google/start:
+    get:
+      operationId: googleStart
+      summary: Empieza el login con Google (redirige al proveedor)
+      description: |
+        Authorization Code + PKCE (S256) + `state` + `nonce`. Guarda el estado del intento en Redis (10 min)
+        y lo ata al navegador con la cookie `__Host-atalaya_oauth` (httpOnly, Secure, SameSite=Lax: Lax y no Strict
+        porque el regreso desde Google es una navegación entre sitios). 404 si el proveedor no está configurado.
+      security: []
+      responses:
+        "302":
+          description: Redirige a la pantalla de autorización del proveedor
+          headers:
+            Location: { description: "URL de autorización con response_type, client_id, redirect_uri, scope, state, nonce y code_challenge", schema: { type: string } }
+            Set-Cookie: { description: "__Host-atalaya_oauth", schema: { type: string } }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/google/callback:
+    get:
+      operationId: googleCallback
+      summary: "Regreso desde Google: canjea el código, valida el id_token y abre sesión"
+      description: |
+        Nunca devuelve JSON ni detalles: siempre redirige. Éxito sin 2FA: `/cuenta` con las cookies de sesión.
+        Éxito con 2FA: `/login#challenge=…` (el reto va en el fragmento, que no viaja al servidor ni en Referer).
+        Cualquier fallo (state, cookie, PKCE, firma, emisor, audiencia, nonce, caducidad, correo no verificado,
+        cuenta desactivada…): `/login?error=google`, sin decir cuál.
+      security: []
+      parameters:
+        - { name: code, in: query, required: false, schema: { type: string, maxLength: 2048 } }
+        - { name: state, in: query, required: false, schema: { type: string, maxLength: 128 } }
+        - { name: error, in: query, required: false, schema: { type: string, maxLength: 128 } }
+      responses:
+        "302":
+          description: Redirige a `/cuenta`, a `/login#challenge=…` o a `/login?error=google`
+          headers:
+            Location: { schema: { type: string } }
   /auth/accept-invite:
     post:
       operationId: acceptInvite
@@ -555,6 +606,12 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    Providers:
+      type: object
+      additionalProperties: false
+      required: [google]
+      properties:
+        google: { type: boolean }
     Message:
       type: object
       additionalProperties: false

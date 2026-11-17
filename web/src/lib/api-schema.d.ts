@@ -202,6 +202,7 @@ export interface paths {
         /**
          * Empieza a activar el 2FA (pide la contraseña); devuelve el secreto y el QR
          * @description Re-autentica con la contraseña: una sesión robada no puede enlazar el autenticador del atacante.
+         *     409 también si la cuenta entra solo con Google y todavía no tiene contraseña.
          *     El 2FA no queda activo hasta confirmarlo con un código en `/auth/2fa/enable`.
          */
         post: operations["twoFactorSetup"];
@@ -283,6 +284,71 @@ export interface paths {
          *     aunque siga dentro de su ventana. Tope: 10 por IP por minuto y 10 fallos por cuenta cada 15 min.
          */
         post: operations["twoFactorVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué formas de entrar con una cuenta externa están configuradas
+         * @description Público. La pantalla de entrada lo consulta para saber si muestra «Continuar con Google».
+         */
+        get: operations["authProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/google/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Empieza el login con Google (redirige al proveedor)
+         * @description Authorization Code + PKCE (S256) + `state` + `nonce`. Guarda el estado del intento en Redis (10 min)
+         *     y lo ata al navegador con la cookie `__Host-atalaya_oauth` (httpOnly, Secure, SameSite=Lax: Lax y no Strict
+         *     porque el regreso desde Google es una navegación entre sitios). 404 si el proveedor no está configurado.
+         */
+        get: operations["googleStart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Regreso desde Google: canjea el código, valida el id_token y abre sesión
+         * @description Nunca devuelve JSON ni detalles: siempre redirige. Éxito sin 2FA: `/cuenta` con las cookies de sesión.
+         *     Éxito con 2FA: `/login#challenge=…` (el reto va en el fragmento, que no viaja al servidor ni en Referer).
+         *     Cualquier fallo (state, cookie, PKCE, firma, emisor, audiencia, nonce, caducidad, correo no verificado,
+         *     cuenta desactivada…): `/login?error=google`, sin decir cuál.
+         */
+        get: operations["googleCallback"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -535,6 +601,9 @@ export interface components {
             page: number;
             pageSize: number;
             total: number;
+        };
+        Providers: {
+            google: boolean;
         };
         Message: {
             message: string;
@@ -890,6 +959,7 @@ export interface operations {
         responses: {
             200: components["responses"]["Message"];
             403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     twoFactorNewRecoveryCodes: {
@@ -907,6 +977,7 @@ export interface operations {
         responses: {
             200: components["responses"]["RecoveryCodes"];
             403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     twoFactorVerify: {
@@ -934,6 +1005,73 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             429: components["responses"]["Error"];
+        };
+    };
+    authProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proveedores disponibles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Providers"];
+                };
+            };
+        };
+    };
+    googleStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirige a la pantalla de autorización del proveedor */
+            302: {
+                headers: {
+                    /** @description URL de autorización con response_type, client_id, redirect_uri, scope, state, nonce y code_challenge */
+                    Location?: string;
+                    /** @description __Host-atalaya_oauth */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    googleCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirige a `/cuenta`, a `/login#challenge=…` o a `/login?error=google` */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     acceptInvite: {

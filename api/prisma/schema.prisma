@@ -43,6 +43,7 @@ model User {
   emailTokens     EmailToken[]
   twoFactor       TwoFactor?
   recoveryCodes   RecoveryCode[]
+  oauthIdentities OAuthIdentity[]
 
   @@map("users")
 }
@@ -168,4 +169,21 @@ model RecoveryCode {
 
   @@index([userId])
   @@map("recovery_codes")
+}
+
+/// Una cuenta externa (hoy solo Google) enlazada a un usuario. Se identifica por `subject`
+/// (el `sub` del proveedor, estable para siempre), NUNCA por el correo: el correo puede cambiar.
+model OAuthIdentity {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String   @db.VarChar(20)
+  subject   String   @db.VarChar(255)
+  /// El correo que el proveedor tenía al enlazar (solo para auditar; no se usa para identificar).
+  email     String   @db.VarChar(254)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+  @@map("oauth_identities")
 }

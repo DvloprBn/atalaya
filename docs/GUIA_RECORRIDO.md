@@ -464,3 +464,90 @@ Casi todas las defensas de esta fase son la misma idea: **una operación condici
 - **Anti-repetición (replay):** rechazar un código que ya se usó aunque siga dentro de su ventana.
 - **Reto (challenge):** el token de un solo uso entre la contraseña y el código.
 - **`GETDEL`:** leer y borrar una llave de Redis en un solo paso atómico.
+
+---
+
+## Capítulo v0.6: entrar con Google
+
+> Lo nuevo: «Continuar con Google» (OpenID Connect: Authorization Code + PKCE + `state` + `nonce`), la política de vinculación de cuentas y un servidor OAuth **falso** para probar todo sin cuenta de Google. Ataques y defensas, ficha por ficha, en [`laboratorio/v0.6-google.md`](laboratorio/v0.6-google.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build                         # ahora levanta también mock-idp (el "Google" de prueba)
+docker compose exec api npx prisma migrate deploy    # tabla oauth_identities
+```
+
+Abre <http://localhost:3070/login> (**con `localhost`, no `127.0.0.1`**: la cookie que ata el intento al navegador es de un solo host) y pulsa **«Continuar con Google»**. Verás la pantalla del servidor de prueba (<http://localhost:3072>, solo esta máquina): elige una cuenta y vuelves a Atalaya con la sesión abierta.
+
+### 2. Qué es OpenID Connect, en pocas líneas
+
+OAuth 2.0 resuelve «dejar que una aplicación haga cosas en tu nombre». **OpenID Connect** le agrega lo que necesitamos para un login: además del código, Google devuelve un **`id_token`**, un JWT firmado que dice **quién eres** (`sub`, `email`, `email_verified`) y **para quién se emitió** (`aud`). Atalaya no pide permisos para tocar nada de tu cuenta de Google: solo `openid email`.
+
+### 3. El recorrido, paso a paso
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/components/google-button.tsx` | Pregunta a `/api/auth/providers` si Google está configurado y muestra un **enlace** (no una llamada de JavaScript: el navegador debe navegar). |
+| 2 | `auth/oauth/oauth.controller.ts` → `start` | Pide a `OAuthService.start()` la URL y pone la cookie `__Host-atalaya_oauth`. Responde 302 a Google. |
+| 3 | `auth/oauth/oauth.service.ts` → `start` | Arma la URL: `response_type=code`, `client_id`, `redirect_uri` exacto, `scope=openid email`, `state`, `nonce` y `code_challenge` (PKCE). |
+| 4 | `auth/oauth/state-store.ts` → `create` | Guarda en Redis (10 min) el `nonce`, el `verifier` y el hash de la cookie, bajo el **hash** del `state`. |
+| 5 | Google | La persona elige su cuenta; Google devuelve el navegador a `/api/auth/google/callback?code=…&state=…`. |
+| 6 | `oauth.controller.ts` → `callback` | Lee la cookie y la **borra** (el intento se gasta pase lo que pase). Cualquier fallo → `/login?error=google`. |
+| 7 | `state-store.ts` → `consume` | `GETDEL` del intento y comparación de la cookie en tiempo constante. Aquí muere el login CSRF. |
+| 8 | `oauth.service.ts` → `exchange` + `http-json.ts` | El **servidor** llama al endpoint de Google con el `code` y el `verifier` (PKCE). Tiempo límite, sin redirecciones, 64 KB máximo. |
+| 9 | `auth/oauth/id-token.ts` | Comprueba algoritmo, llave (`kid`), firma, emisor, audiencia, vigencia, `nonce` y `email_verified`. |
+| 10 | `auth/oauth/google-accounts.ts` | Decide a qué cuenta corresponde (ver §4). |
+| 11 | `oauth.service.ts` | Con 2FA activo → un **reto**; si no, abre sesión. |
+| 12 | `oauth.controller.ts` | 302 a `/cuenta` con las cookies de sesión, o a `/login#challenge=…` si falta el segundo factor. |
+
+### 4. A qué cuenta corresponde una cuenta de Google (`google-accounts.ts`)
+
+```
+¿Esa identidad (el "sub" de Google) ya está enlazada?  ──sí──►  entra a SU cuenta (aunque el correo haya cambiado)
+        │ no
+¿Ese correo ya tiene cuenta?
+   ├─ sí, verificada y sin otra cuenta de Google ──►  se VINCULA y se AVISA por correo al dueño
+   ├─ sí, pero desactivada / con otra cuenta de Google ──►  se rechaza
+   └─ no ──►  se CREA una cuenta nueva: rol usuario, sin contraseña, correo verificado
+```
+
+Dos intentos simultáneos con la misma cuenta nueva: uno crea y el otro choca con la restricción única; vuelve a mirar y encuentra lo que acaba de crear el primero.
+
+### 5. El servidor OAuth falso (`mock-idp/`)
+
+Es un archivo (`server.mjs`, sin dependencias) que hace el papel de Google: pantalla de «elegir cuenta», canje de código, `id_token` firmado con RSA y sus llaves públicas (JWKS). Por eso el CI y tu máquina prueban el flujo completo sin cuenta de Google.
+
+Y puede **mentir a propósito**: con `x_fault=nonce`, `aud`, `iss`, `expired`, `future-iat`, `alg-none`, `hs256`, `bad-signature` o `unknown-kid`, firma un `id_token` defectuoso, y las pruebas comprueban que Atalaya los rechaza todos. **Nunca va a producción**: el compose de producción (v1.0) no lo incluye.
+
+### 6. Usar Google de verdad (opcional)
+
+1. En <https://console.cloud.google.com> crea un **cliente OAuth** de tipo «Aplicación web» y agrega como URI de redirección `http://localhost:3070/api/auth/google/callback`.
+2. Descomenta los seis `OAUTH_*` de `.env.example` en tu `.env` con tus valores y reinicia la API.
+
+No hay que cambiar código: el compose usa lo que pongas en `.env` y, si no pones nada, el servidor falso.
+
+### 7. Experimentos
+
+| # | Haz esto | Qué deberías ver | Qué enseña |
+|---|---|---|---|
+| 1 | Entra con Google y mira **Herramientas del navegador → Aplicación → Cookies** | `__Host-atalaya_oauth` aparece en el viaje y desaparece al volver | La cookie del intento se gasta |
+| 2 | En la pantalla de «elegir cuenta» agrégale `&x_fault=nonce` a la URL y elige una cuenta | Vuelves a `/login` con «No pudimos iniciar sesión con Google» | Un token de otro intento no sirve |
+| 3 | Mismo experimento con `&x_fault=hs256` y con `&x_fault=aud` | El mismo aviso | Cada falsificación se rechaza |
+| 4 | `docker compose logs api \| grep "con Google rechazado"` | `…rechazado: token_nonce`, `token_audience`… | El motivo va solo al log, nunca a la persona |
+| 5 | Empieza un login, **copia el enlace del regreso**, ábrelo en una **ventana de incógnito** | Vuelves a `/login` con el aviso, sin sesión | Login CSRF: esa ventana no tiene la cookie |
+| 6 | Entra con `ana.google@example.com`, ciérrala y vuelve a entrar | La misma cuenta (compara el `id` en `/api/auth/me`) | La identidad es el `sub`, no una cuenta nueva |
+| 7 | En `google-accounts.ts` quita `\|\| existing.oauthIdentities.length > 0` y corre `npm test` | Falla 1 prueba unitaria; la suite viva sigue en verde | Defensa en capas: la base también lo impide |
+| 8 | En `id-token.ts` quita la revisión de `header.alg` y corre `npm test` | Fallan 3 pruebas unitarias | Las unitarias aíslan cada capa |
+
+### 8. Glosario de esta fase
+
+- **OpenID Connect (OIDC):** la capa de identidad sobre OAuth 2.0. Devuelve un `id_token`.
+- **Authorization Code:** el flujo en que el navegador recibe un código **de un solo uso** y el servidor lo canjea por los tokens.
+- **PKCE:** prueba de que quien canjea el código es quien empezó el flujo (`verifier` secreto, `challenge` público).
+- **`state`:** un valor al azar que viaja a Google y vuelve idéntico; ata el regreso a un intento nuestro.
+- **`nonce`:** un valor al azar que vuelve **dentro del `id_token` firmado**; ata el token a ese intento.
+- **JWKS:** el conjunto de llaves públicas de Google con las que se verifica la firma.
+- **`sub`:** el identificador estable de la persona en Google. El correo puede cambiar; el `sub`, no.
+- **Login CSRF:** hacer que la víctima termine el login de otra persona.
+- **Defensa en capas:** que dos barreras distintas rechacen el mismo ataque.

@@ -1,6 +1,20 @@
 // Lee la configuración del entorno UNA vez y se niega a arrancar si falta algo.
 // Fallar al arrancar es mejor que fallar a media petición con un error confuso.
 
+/** Un proveedor OpenID Connect (Google). Los endpoints vienen del entorno, nunca de lo que escribe un visitante. */
+export interface OAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  /** A dónde manda el NAVEGADOR a la persona (pantalla de Google). */
+  authUrl: string;
+  /** A dónde llama el SERVIDOR para canjear el código. */
+  tokenUrl: string;
+  /** Las llaves públicas con las que se verifica la firma del id_token. */
+  jwksUrl: string;
+  /** Valores aceptados para `iss` en el id_token. */
+  issuers: string[];
+}
+
 export interface Env {
   port: number;
   databaseUrl: string;
@@ -16,6 +30,8 @@ export interface Env {
   totpEncryptionKey: string;
   /** Multiplica los topes por IP de las rutas de acceso. 1 en producción (ver common/http/throttle.ts). */
   throttleScale: number;
+  /** null = el login con Google no está configurado (las rutas responden 404). */
+  oauth: OAuthConfig | null;
 }
 
 let cached: Env | undefined;
@@ -33,6 +49,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     mailFrom: required(source, 'MAIL_FROM'),
     totpEncryptionKey: required(source, 'TOTP_ENCRYPTION_KEY'),
     throttleScale: Number(source.THROTTLE_SCALE ?? 1),
+    oauth: loadOAuth(source),
   };
   if (!Number.isInteger(env.port) || env.port <= 0) {
     throw new Error('PORT debe ser un entero positivo');
@@ -63,4 +80,39 @@ function required(source: NodeJS.ProcessEnv, name: string): string {
   // El mensaje nombra la variable, nunca su valor: puede ser un secreto.
   if (!value) throw new Error(`Falta la variable de entorno ${name}`);
   return value;
+}
+
+const OAUTH_VARS = ['OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET', 'OAUTH_AUTH_URL', 'OAUTH_TOKEN_URL', 'OAUTH_JWKS_URL', 'OAUTH_ISSUER'];
+
+/** Todo o nada: con una variable a medias, mejor no arrancar que fallar a media petición. */
+function loadOAuth(source: NodeJS.ProcessEnv): OAuthConfig | null {
+  const present = OAUTH_VARS.filter((name) => source[name]);
+  if (present.length === 0) return null;
+  const missing = OAUTH_VARS.filter((name) => !source[name]);
+  if (missing.length > 0) throw new Error(`Configuración de OAuth incompleta: falta ${missing.join(', ')}`);
+
+  const urls = ['OAUTH_AUTH_URL', 'OAUTH_TOKEN_URL', 'OAUTH_JWKS_URL'].map((name) => {
+    const value = source[name] as string;
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error(`${name} no es una URL válida`);
+    }
+    // En producción el canje del código y las llaves viajan SOLO por HTTPS.
+    if (source.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+      throw new Error(`En producción ${name} debe ser https`);
+    }
+    return value;
+  });
+  const issuer = source.OAUTH_ISSUER as string;
+  return {
+    clientId: source.OAUTH_CLIENT_ID as string,
+    clientSecret: source.OAUTH_CLIENT_SECRET as string,
+    authUrl: urls[0],
+    tokenUrl: urls[1],
+    jwksUrl: urls[2],
+    // Google publica el emisor de dos formas; las dos son legítimas.
+    issuers: issuer === 'https://accounts.google.com' ? [issuer, 'accounts.google.com'] : [issuer],
+  };
 }

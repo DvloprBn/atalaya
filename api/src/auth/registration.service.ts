@@ -3,13 +3,13 @@ import { Prisma } from '../generated/prisma/client.js';
 import { loadEnv } from '../config/env.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { DEFAULT_ROLE_ID } from './constants.js';
 import { alreadyRegistered, verifyEmail } from './emails.js';
 import { hashPassword, passwordContainsEmail } from './passwords.js';
 import { RateLimits } from './rate-limits.js';
 import { newOpaqueToken, sha256 } from './tokens.js';
 
 const LINK_TTL_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_ROLE_ID = 1; // 'usuario': fila fija sembrada por la migración
 
 // DISEÑO: registrarse NO crea al usuario. Crea un enlace pendiente que guarda la
 // contraseña elegida (ya en hash); el usuario nace al abrir ese enlace. Así:

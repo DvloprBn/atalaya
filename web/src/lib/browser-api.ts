@@ -8,6 +8,7 @@ import type { components } from './api-schema';
 
 export type PublicUser = components['schemas']['PublicUser'];
 export type LoginResponse = components['schemas']['LoginResponse'];
+export type Providers = components['schemas']['Providers'];
 export type TwoFactorStatus = components['schemas']['TwoFactorStatus'];
 export type TwoFactorSetup = components['schemas']['TwoFactorSetup'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];

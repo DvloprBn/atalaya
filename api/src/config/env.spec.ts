@@ -42,6 +42,36 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...complete, NODE_ENV: 'production' }).throttleScale).toBe(1);
   });
 
+  describe('OAuth (login con Google)', () => {
+    const oauth = {
+      OAUTH_CLIENT_ID: 'id', OAUTH_CLIENT_SECRET: 's', OAUTH_ISSUER: 'https://accounts.google.com',
+      OAUTH_AUTH_URL: 'https://accounts.google.com/o/oauth2/v2/auth',
+      OAUTH_TOKEN_URL: 'https://oauth2.googleapis.com/token',
+      OAUTH_JWKS_URL: 'https://www.googleapis.com/oauth2/v3/certs',
+    };
+
+    it('sin ninguna variable queda apagado (null)', () => {
+      expect(loadEnv(complete).oauth).toBeNull();
+    });
+
+    it('con todas, queda configurado y acepta las dos formas del emisor de Google', () => {
+      expect(loadEnv({ ...complete, ...oauth }).oauth?.issuers).toEqual(['https://accounts.google.com', 'accounts.google.com']);
+      expect(loadEnv({ ...complete, ...oauth, OAUTH_ISSUER: 'http://mock-idp:4000' }).oauth?.issuers).toEqual(['http://mock-idp:4000']);
+    });
+
+    it('con una variable a medias no arranca, y nombra cuál falta', () => {
+      const { OAUTH_JWKS_URL: _omitted, ...rest } = oauth;
+      expect(() => loadEnv({ ...complete, ...rest })).toThrow('OAUTH_JWKS_URL');
+    });
+
+    it('una URL inválida no arranca; y en producción solo https', () => {
+      expect(() => loadEnv({ ...complete, ...oauth, OAUTH_TOKEN_URL: 'no-es-url' })).toThrow('OAUTH_TOKEN_URL');
+      const insecure = { ...oauth, OAUTH_TOKEN_URL: 'http://mock-idp:4000/token' };
+      expect(loadEnv({ ...complete, ...insecure }).oauth).not.toBeNull(); // desarrollo: permitido
+      expect(() => loadEnv({ ...complete, ...insecure, NODE_ENV: 'production' })).toThrow('https');
+    });
+  });
+
   it('rechaza un APP_ORIGIN con ruta o barra final', () => {
     expect(() => loadEnv({ ...complete, APP_ORIGIN: 'http://localhost:3070/' })).toThrow('APP_ORIGIN');
   });

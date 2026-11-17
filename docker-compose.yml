@@ -49,6 +49,14 @@ services:
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
       # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP. En producción NO se pone (vale 1).
       THROTTLE_SCALE: "5"
+      # Login con Google. Por defecto apunta al servidor OAuth FALSO de abajo. Para usar Google de
+      # verdad, pon los seis OAUTH_* en tu .env (ver .env.example); sin ellos, el valor de aquí manda.
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-atalaya-mock-client}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      OAUTH_AUTH_URL: ${OAUTH_AUTH_URL:-http://localhost:3072/authorize}   # lo abre el NAVEGADOR
+      OAUTH_TOKEN_URL: ${OAUTH_TOKEN_URL:-http://mock-idp:4000/token}      # lo llama el SERVIDOR, por la red interna
+      OAUTH_JWKS_URL: ${OAUTH_JWKS_URL:-http://mock-idp:4000/jwks}
+      OAUTH_ISSUER: ${OAUTH_ISSUER:-http://mock-idp:4000}
       APP_ORIGIN: http://localhost:${ATALAYA_PORT:-3070}
       SMTP_URL: smtp://mailpit:1025
       MAIL_FROM: Atalaya <no-reply@example.com>
@@ -59,6 +67,7 @@ services:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
       mailpit: { condition: service_started }
+      mock-idp: { condition: service_started }
     networks: [edge, data]             # la única pieza que cruza de una red a otra
 
   worker:
@@ -90,6 +99,27 @@ services:
     ports:
       - "127.0.0.1:${MAILPIT_PORT:-3071}:8025"
     networks: [edge]                   # una red interna no puede publicar puertos
+
+  # SERVIDOR OAUTH FALSO (hace de Google): SOLO desarrollo y CI. El de producción (v1.0) no lo incluye.
+  # Pantalla de "elegir cuenta": http://localhost:3072/authorize (solo esta máquina).
+  mock-idp:
+    image: node:24-alpine
+    <<: *hardening
+    user: node
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    read_only: true
+    environment:
+      PORT: "4000"
+      MOCK_CLIENT_ID: ${OAUTH_CLIENT_ID:-atalaya-mock-client}
+      MOCK_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      MOCK_REDIRECT_URI: http://localhost:${ATALAYA_PORT:-3070}/api/auth/google/callback
+      MOCK_ISSUER: http://mock-idp:4000
+    volumes:
+      - ./mock-idp:/app:ro
+    ports:
+      - "127.0.0.1:3072:4000"
+    networks: [edge]
 
   db:
     image: postgres:18-alpine

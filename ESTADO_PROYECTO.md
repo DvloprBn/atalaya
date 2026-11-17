@@ -9,29 +9,30 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.5` (2FA con TOTP), **construida y verificada** en la rama `fase/v0.5-2fa`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.4). `v0.1` a `v0.4` cerradas (etiqueta `v0.4` en `e402831`).
+**Fase actual:** `v0.6` (entrar con Google), **construida y verificada** en la rama `fase/v0.6-google`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.5). `v0.1` a `v0.5` cerradas (etiqueta `v0.5` en `c35012f`).
 
-**Qué hay en v0.5 (verificado el 2026-11-17 contra el sistema vivo):**
-- Migración `two_factor`: tablas `two_factors` y `recovery_codes` y el motivo `two_factor_changed`, con CHECKs probados uno por uno.
-- TOTP escrito a mano: valida con los 6 vectores oficiales del RFC 6238 y coincide con `pyotp` con un secreto al azar.
-- Secreto cifrado AES-256-GCM con el id del usuario como dato asociado (verificado en la base: `v1.<iv>.<etiqueta>.<texto>`); códigos de recuperación guardados solo como hash.
-- Login en dos pasos con reto de un solo uso; activar/desactivar/regenerar con contraseña y código; activar cierra las demás sesiones.
-- Interfaz: login en dos pasos y `/cuenta/seguridad` (QR, códigos de recuperación, administrar). Se corrigió un error real que mostraban las capturas: el campo del código arrastraba el correo del paso anterior.
-- Pruebas: unitarias 117 · ataques e2e 26 (+11 de 2FA, incluidas 2 de carrera, y 1 de tope) · Chrome 7 · smoke 23 · worker 2. Simulación del CI con base nueva: todo en verde.
-- Fallas plantadas: sin anti-repetición cayeron 3 pruebas; sin gasto del reto, 4 (y solo la carrera con códigos distintos distingue ese caso); tope del reto en 5000, 1; login que ignora el reto, la de Chrome.
-- Nuevo `THROTTLE_SCALE` (5 en desarrollo y CI, 1 obligatorio en producción): las suites comparten una IP y ya rozaban el tope de entradas por minuto.
+**Qué hay en v0.6 (verificado el 2026-11-17 contra el sistema vivo):**
+- Opción A elegida por el dueño: todo contra un **servidor OAuth falso** local (`mock-idp/`); el cliente real de Google se agrega después con seis variables `OAUTH_*`.
+- Authorization Code + PKCE (vector oficial del RFC 7636) + `state` + `nonce`; el intento vive en Redis (10 min, un solo uso, solo hashes) atado al navegador por una cookie `__Host-` `SameSite=Lax`.
+- `id_token` verificado a mano (93 líneas): RS256 fijo, `kid`, firma, emisor, audiencia, vigencia, `nonce` y `email_verified`.
+- Vinculación por `sub` (tabla `oauth_identities`, con CHECKs y unicidades probados): vincula solo cuentas ya verificadas y avisa por correo; cuenta nueva = `usuario` sin contraseña. El 2FA no se salta. Una cuenta solo-Google recibe un `409` claro al intentar activar el 2FA.
+- Consumo seguro del proveedor: sin redirecciones, 5 s, 64 KB, solo JSON; en producción solo HTTPS (verificado en `env.spec`).
+- Pruebas: unitarias 172 · ataques e2e 53 (25 de Google, en dos archivos) · Chrome 11 · smoke 25 · worker 2. Simulación del CI con base nueva: todo en verde.
+- Fallas plantadas: sin la cookie del intento cayeron 2 pruebas (login CSRF); sin el nonce, 2; sin `email_verified`, 2. **Dos fallas (algoritmo y «ya tiene otra cuenta de Google») no las vio la suite viva** porque otra capa también las rechaza (RS256 fijo; restricción única de la base): las unitarias sí cayeron (3 y 1). Se documentó como defensa en capas.
 
 **Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.5 y `docs/laboratorio/v0.5-2fa.md`, y prueba el 2FA con su teléfono) y pide el commit.
-2. Push, PR, CI, fusión y etiqueta `v0.5`.
-3. Arranca `v0.6` (Google OAuth).
+1. El dueño revisa (guía capítulo v0.6 y `docs/laboratorio/v0.6-google.md`; prueba «Continuar con Google» en <http://localhost:3070/login>) y pide el commit.
+2. Push, PR, CI, fusión y etiqueta `v0.6`.
+3. Arranca `v0.7` (bitácoras de seguridad y panel).
 
-**Bloqueos:** ninguno.
+**Bloqueos:** ninguno. Probar con Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | v0.6 construida y verificada (sin comitear): login con Google (Code + PKCE + state + nonce) contra un servidor OAuth falso, id_token verificado a mano, vinculación por sub, 25 pruebas de ataque; laboratorio de 8 secciones y capítulo v0.6. |
+| 2026-11-17 | PR #5 fusionado con el CI 5/5; etiqueta `v0.5` en `c35012f`. v0.5 cerrada. |
 | 2026-11-17 | v0.5 construida y verificada (sin comitear): 2FA TOTP a mano, secreto cifrado, reto de un solo uso, códigos de recuperación, pantalla de seguridad; laboratorio de 11 ataques y capítulo v0.5. |
 | 2026-11-17 | PR #4 fusionado con el CI 5/5; etiqueta `v0.4` en `e402831`. v0.4 cerrada. El enlace del lienzo de diseño se retiró de la rama antes del PR (reescrita con permiso del dueño). |
 | 2026-11-17 | PR #3 fusionado con el CI 5/5; etiqueta `v0.3` en `073fe40`. v0.3 cerrada. |

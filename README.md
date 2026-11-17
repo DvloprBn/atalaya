@@ -37,7 +37,7 @@ docker compose exec api npx prisma db seed          # cuentas de prueba: <rol>@e
 ./scripts/smoke.sh                      # comprueba que funciona y que es seguro
 ```
 
-Abre <http://localhost:3070>. Los correos de desarrollo llegan a Mailpit: <http://localhost:3071>. Todo escucha solo en `127.0.0.1`.
+Abre <http://localhost:3070> (**con `localhost`**: el login con Google ata el intento a la cookie de ese host). Los correos de desarrollo llegan a Mailpit: <http://localhost:3071>. «Continuar con Google» usa un servidor OAuth **de prueba** (<http://localhost:3072>); para usar Google de verdad, ver el capítulo v0.6 de la guía. Todo escucha solo en `127.0.0.1`.
 
 ## Pruebas
 
@@ -57,6 +57,7 @@ Abre <http://localhost:3070>. Los correos de desarrollo llegan a Mailpit: <http:
 | `web/` | Next.js 16: solo pantallas |
 | `worker/` | Python 3.14 + uv: el análisis de datos |
 | `contracts/` | Los acuerdos entre piezas (OpenAPI y llaves de Redis) |
+| `mock-idp/` | Un servidor OAuth falso que hace de Google (solo desarrollo y CI) |
 | `docs/` | La guía de recorrido y el laboratorio de ataques |
 | `scripts/` | Prueba de humo contra el sistema vivo |
 

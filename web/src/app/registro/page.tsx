@@ -1,5 +1,6 @@
 'use client';
 import { AuthShell } from '@/components/auth-shell';
+import { GoogleButton } from '@/components/google-button';
 import { api } from '@/lib/browser-api';
 import { useForm } from '@/lib/use-form';
 
@@ -38,6 +39,7 @@ export default function RegisterPage() {
         <button disabled={busy}>Crear cuenta</button>
         {result && !result.ok && <p role="alert">{result.message}</p>}
       </form>
+      <GoogleButton />
       <p style={{ fontSize: 14 }}>
         ¿Ya tienes cuenta? <a href="/login">Inicia sesión</a>
       </p>

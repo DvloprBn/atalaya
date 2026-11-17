@@ -12,6 +12,9 @@
 | S-9 | La llave `TOTP_ENCRYPTION_KEY` no se puede rotar: no hay forma de re-cifrar los secretos con una llave nueva. El formato guarda una versión (`v1.`) para poder añadirlo. Y si se pierde, los secretos son irrecuperables (quedan los códigos de recuperación): respaldarla **aparte** de la base. | Claude | v1.0 |
 | S-10 | Quien pierde el teléfono **y** los códigos de recuperación no puede entrar, y ningún admin puede quitarle el 2FA. Un sistema real necesita un proceso de recuperación asistida con verificación de identidad. | Claude (diseño) · Dueño (proceso) | v1.0 (extensión documentada) |
 | S-11 | TOTP no resiste el phishing en tiempo real (una página falsa que reenvía el código). WebAuthn/passkeys ata la respuesta al dominio y sí lo resiste. | Claude | Después de v1.0 (extensión) |
+| S-12 | **Google real sin probar de punta a punta:** todo se probó contra el servidor OAuth falso. Falta un cliente OAuth de Google (lo crea el dueño en Google Cloud Console, ver `docs/GUIA_RECORRIDO.md` §6 del capítulo v0.6) para comprobar la pantalla de consentimiento real, una cuenta de Workspace y la rotación real de llaves. | Dueño (opcional) | Antes de v1.0 |
+| S-13 | Una cuenta solo-Google no tiene contraseña y no puede activar el 2FA ni desactivarlo sin crearla antes con «¿Olvidaste tu contraseña?». Mejora posible: re-autenticar con un inicio de sesión reciente de Google. | Claude | v1.0 (extensión) |
+| S-14 | Los intentos de login con Google **rechazados** solo quedan como una línea de log con su código. Cuando exista `security_events` (v0.7), deben registrarse allí (sin datos del intento). | Claude | v0.7 |
 | S-8 | La contraseña no se compara contra listas de contraseñas filtradas (NIST lo recomienda). Opción sin terceros: una lista local de las más comunes. | Claude | v0.5 o v0.7 (por decidir) |
 | S-3 | En producción la API debe negarse a arrancar con valores de ejemplo de `.env.example`. | Claude | v1.0 |
 | S-4 | Las imágenes base van por etiqueta (`postgres:18-alpine`…), no por digest. En producción, fijar por digest. | Claude | v1.0 |
@@ -24,9 +27,10 @@
 |---|---|---|---|
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
-## Siguiente fase (v0.6)
-- Contrato primero: inicio y retorno de Google (`/auth/google` y `/auth/google/callback`).
-- Authorization Code + **PKCE** + `state` + `nonce`; del token se validan emisor, audiencia, vigencia y que el correo esté verificado.
-- Solo se vincula a una cuenta **existente** si su correo ya está verificado (sin pre-secuestro); una cuenta de Google nueva nace con rol `usuario`.
-- Una cuenta con 2FA que entra por Google **también** pasa por el segundo paso.
-- Laboratorio v0.6: login CSRF (`state`), repetición de `nonce`, SSRF y consumo seguro de la API de Google (OWASP API7 y API10), vinculación a cuenta ajena.
+## Siguiente fase (v0.7)
+- Contrato primero: lectura de la bitácora de seguridad para el admin.
+- Tablas `security_events` (las IP con hash) y `audit_logs`; registrar intentos fallidos de login, robos de refresh detectados, bloqueos por tope, cambios de rol, activar/desactivar 2FA y los **rechazos del login con Google** (S-14).
+- Panel de seguridad en el admin (con el radar: días de ataque en ámbar).
+- Aviso al dueño de la cuenta cuando se cierran sus sesiones por robo (S-7).
+- Recolector de reportes CSP (S-2) y, si se decide, el tope de peticiones en Redis (S-6).
+- Laboratorio v0.7: ráfagas por ruta, cambio de IP, volumen de la bitácora.

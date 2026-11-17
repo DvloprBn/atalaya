@@ -9,6 +9,11 @@ import { PasswordResetService } from './password-reset.service.js';
 import { RateLimits } from './rate-limits.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionsService } from './sessions.service.js';
+import { OAuthAccounts } from './oauth/google-accounts.js';
+import { JwksCache } from './oauth/jwks.js';
+import { OAuthController } from './oauth/oauth.controller.js';
+import { OAuthService } from './oauth/oauth.service.js';
+import { OAuthStates } from './oauth/state-store.js';
 import { Challenges } from './two-factor/challenges.js';
 import { SecondFactorService } from './two-factor/second-factor.service.js';
 import { SecretBox } from './two-factor/secret-box.js';
@@ -27,12 +32,14 @@ const JWT = { issuer: 'atalaya-api', audience: 'atalaya-web' };
       verifyOptions: { algorithms: ['HS256'], ...JWT },
     }),
   ],
-  controllers: [AuthController, TwoFactorController],
+  controllers: [AuthController, TwoFactorController, OAuthController],
   providers: [
     AuthService, RegistrationService, PasswordResetService, InvitationsService, SessionsService, RateLimits, AuthGuard,
     // Segundo factor. La llave de cifrado sale del entorno (nunca de la base) y se valida al arrancar.
     { provide: SecretBox, useFactory: () => new SecretBox(Buffer.from(loadEnv().totpEncryptionKey, 'hex')) },
     Challenges, SecondFactorService, TwoFactorService,
+    // Login con Google (OpenID Connect).
+    OAuthService, OAuthStates, JwksCache, OAuthAccounts,
   ],
   exports: [AuthGuard, JwtModule, InvitationsService, SessionsService],
 })
