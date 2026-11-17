@@ -238,3 +238,80 @@ Las rutas de acceso tienen topes por IP: la suite e2e cabe **una vez cada 15 min
 - **CSRF:** que otro sitio use tus cookies sin que lo sepas.
 - **Bandeja de salida (outbox):** tabla donde los correos esperan a que un proceso aparte los mande.
 - **Argon2id:** la función que convierte una contraseña en un hash costoso de adivinar.
+
+---
+
+## Capítulo v0.3: roles con jerarquía y administración de cuentas
+
+> Lo nuevo: el panel `/admin`, invitaciones por correo y la regla que manda en todo: **solo se gestiona lo que está estrictamente por debajo de tu nivel**. Ataques y defensas en [`laboratorio/v0.3-roles.md`](laboratorio/v0.3-roles.md).
+
+### 1. Preparar
+
+```bash
+docker compose exec api npx prisma migrate deploy   # aplica la migración "admin"
+```
+
+Entra como `admin@example.com` (o `super@example.com`) con `TestOnly123!` y ve a **Mi cuenta → Administración de cuentas**.
+
+### 2. Los niveles
+
+| Nivel | Rol | Gestiona a | Tope de cuentas activas |
+|---|---|---|---|
+| 5 | super | 0–4 | 1 |
+| 4 | director | 0–3 | 1 |
+| 3 | admin | 0–2 | — |
+| 2 | manager | (sin panel todavía) | — |
+| 1 | staff | (sin panel todavía) | — |
+| 0 | usuario | — | — |
+
+Dos capas, cada una con su trabajo:
+
+1. **La puerta** (`common/auth/roles.guard.ts` + `@MinLevel`): ¿puedes entrar a esta **función**? Sin el nivel → 403.
+2. **Los objetos** (`admin/hierarchy.ts`): dentro de la función, ¿qué **cuentas** puedes ver y tocar? Las de arriba → 404, como si no existieran.
+
+### 3. Recorrido: invitar a una persona
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/app/admin/page.tsx` | El formulario solo ofrece los roles que da `GET /api/admin/roles` (los de nivel menor al tuyo). |
+| 2 | `app.module.ts` | Guardas: tope → origen → sesión → **nivel** (`@MinLevel(3)`). |
+| 3 | `admin/admin-users.service.ts` → `create` | ¿El rol está por debajo de ti? (403 si no). En una **transacción**: ¿hay cupo en ese rol? (candado sobre la fila del rol); ¿el correo ya existe? (409); crea la cuenta **sin contraseña** y la invitación. |
+| 4 | `auth/invitations.service.ts` → `send` | El enlace (72 h) y el correo se guardan **en la misma transacción** que la cuenta: nacen juntos o ninguno. |
+| 5 | `web/src/app/bienvenida/page.tsx` | La persona elige su contraseña. `accept` reclama el enlace (un solo uso) y activa la cuenta con el correo ya verificado. |
+
+### 4. Recorrido: cambiar un rol
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/app/admin/user-row.tsx` | El selector manda `PATCH /api/admin/users/:id/role` y **vuelve a leer la tabla** pase lo que pase. |
+| 2 | `ParseUUIDPipe` | Un id que no es UUID → 400 antes de tocar la base. |
+| 3 | `admin-users.service.ts` → `lockTarget` | `SELECT … FOR UPDATE OF u`: bloquea la cuenta y lee su nivel **bajo candado**. Si está a tu nivel o arriba → 404. |
+| 4 | `canAssign` | El nivel actual y el nuevo deben estar por debajo del tuyo → si no, 403. |
+| 5 | `ensureCapacity` | Si el rol tiene tope (director, super), candado sobre la fila del rol y conteo de activas → 409 si está lleno. |
+
+### 5. Recorrido: desactivar
+
+`setDisabled` marca `disabled_at` y revoca **todas** las sesiones de la cuenta en la misma transacción. Como el guard revisa la sesión en cada petición (v0.2), la persona queda fuera **en su siguiente clic**. Reactivar no revive las sesiones viejas.
+
+### 6. El inventario de rutas
+
+`api/src/route-inventory.spec.ts` recorre los controladores del `AppModule`, saca método, ruta y si es `@Public()` de los decoradores, y lo compara con `contracts/openapi.yaml`. Es la versión automática de «toda ruta nueva se escribe primero en el contrato».
+
+### 7. Experimentos
+
+| # | Haz esto | Qué deberías ver | Qué enseña |
+|---|---|---|---|
+| 1 | Entra como `admin` y abre `/admin` | Solo cuentas usuario, staff y manager | La jerarquía en las consultas |
+| 2 | Entra como `super`, copia el id del director y pídelo como `admin` con curl | `404` | IDOR: no se confirma que existe |
+| 3 | Invita a alguien, abre Mailpit y acepta la invitación | La cuenta pasa de «invitada» a «activa» | Contraseña que solo la persona conoce |
+| 4 | Entra con esa cuenta en otra ventana, desactívala desde el admin y recarga su `/cuenta` | Te saca al login | Desactivar corta al instante |
+| 5 | Agrega una ruta `@Public()` de prueba en cualquier controlador y corre `npm test` en `api/` | Falla `route-inventory.spec.ts` | El contrato manda |
+| 6 | En `hierarchy.ts` cambia `<` por `<=` y corre `npm test` | Fallan 10 pruebas | Una regla, una prueba que la vigila |
+
+### 8. Glosario de esta fase
+
+- **RBAC (control de acceso por roles):** los permisos dependen del rol; aquí además los roles tienen jerarquía.
+- **IDOR:** acceder a un objeto ajeno cambiando su identificador.
+- **Escalada vertical:** conseguir un nivel mayor al propio.
+- **`FOR UPDATE`:** bloquea filas hasta que termina la transacción; quien llega después espera y ve el dato ya actualizado.
+- **Invitación:** cuenta creada sin contraseña que se activa con un enlace de un solo uso.

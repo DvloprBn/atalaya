@@ -9,14 +9,19 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.2` **cerrada** (etiqueta `v0.2` = commit de fusión `24da658`, PR #2, CI 5/5). Siguiente: `v0.3` (6 roles con jerarquía y admin de usuarios) en la rama `fase/v0.3-roles-admin`.
+**Fase actual:** `v0.3` (6 roles con jerarquía, panel `/admin`, invitaciones), **construida y verificada** en la rama `fase/v0.3-roles-admin`. **Sin comitear** el trabajo de la fase. `v0.1` y `v0.2` cerradas (etiquetas en `a214a5a` y `24da658`).
 
-**Qué hay hasta v0.2 (verificado el 2026-11-17):**
-- Esqueleto (v0.1): Docker con dos redes, una sola puerta en `127.0.0.1:3070`, worker aislado, cabeceras en Caddy, contrato OpenAPI, pre-commit y CI.
-- Acceso (v0.2): registro con verificación (el usuario nace al abrir el enlace), login, sesión con acceso JWT de 10 min y refresh de un solo uso rotado, robo de refresh detectado, logout y restablecimiento que cortan al instante, sin enumeración, topes por IP, cuenta y destinatario, CSRF, Argon2id y correos por bandeja de salida (Mailpit en desarrollo).
-- Pruebas: unitarias 32 · ataques e2e 9 · Chrome real 1 · smoke 23 · worker 2. **CI 5/5 en GitHub** con las dos suites contra el sistema vivo (incluido Chrome en el servidor de GitHub).
+**Qué funciona (verificado el 2026-11-17 contra el sistema vivo):**
+- Migración `admin`: propósito `invite` y motivo `account_disabled`, con CHECKs probados (escritos sin nombrar el valor nuevo del enum: Postgres no deja usarlo en la misma transacción).
+- API: 7 rutas `/api/admin/*` (nivel admin o más) + `accept-invite`. Jerarquía estricta (404 para lo de arriba), candado de fila en cada cambio, tope de 1 director y 1 super con candado de rol, desactivar revoca sesiones.
+- Pruebas: unitarias 82 (incluye las 36 combinaciones de la jerarquía y el inventario de rutas contra el contrato) · ataques e2e 16 (9 de acceso + 7 de admin, incluida la carrera por el puesto de director) · Chrome real 3 · smoke 23 · worker 2.
+- Fallas plantadas: la regla `<` → `<=` hizo caer 10 unitarias y la de escalada e2e; reveló que la regla estaba duplicada y se unificó. El inventario de rutas falló al escribirse (faltaban las 8 rutas en el contrato) y pasó al completarlo.
+- Simulación del CI con base nueva: todo en verde.
 
-**Siguiente paso:** v0.3. Primero el contrato (admin de usuarios y roles). Ver `PENDIENTES.md` → «Siguiente fase».
+**Siguiente paso:**
+1. El dueño revisa (guía capítulo v0.3 y `docs/laboratorio/v0.3-roles.md`) y pide el commit.
+2. Push, PR, CI, fusión y etiqueta `v0.3`.
+3. Arranca `v0.4` (2FA con TOTP y códigos de recuperación).
 
 **Bloqueos:** ninguno.
 
@@ -24,6 +29,7 @@
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | v0.3 construida y verificada (sin comitear): jerarquía, admin de cuentas, invitaciones, inventario de rutas; laboratorio de 9 ataques y capítulo v0.3. |
 | 2026-11-17 | PR #2 fusionado con el CI 5/5 (incluidas las suites e2e y de Chrome en GitHub); etiqueta `v0.2` en `24da658`. v0.2 cerrada. |
 | 2026-11-17 | v0.2 construida y verificada (sin comitear): acceso completo, 3 suites de pruebas validadas con fallas plantadas, laboratorio de 10 ataques y capítulo v0.2 de la guía. |
 | 2026-11-17 | PR #1 fusionado por el dueño con el CI 5/5; etiqueta `v0.1` en `a214a5a`. v0.1 cerrada. |

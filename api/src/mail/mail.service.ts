@@ -1,6 +1,7 @@
 import { Global, Injectable, Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
 import { loadEnv } from '../config/env.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailContent, renderEmail } from './email-template.js';
 
@@ -27,10 +28,13 @@ export class MailService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Lo único que usan los demás módulos: deja el correo en la bandeja y regresa al instante. */
-  async enqueue(to: string, content: EmailContent): Promise<void> {
+  /**
+   * Lo único que usan los demás módulos: deja el correo en la bandeja y regresa al instante.
+   * Acepta una transacción: así un correo y el dato que lo origina se guardan juntos o ninguno.
+   */
+  async enqueue(to: string, content: EmailContent, tx: Prisma.TransactionClient = this.prisma): Promise<void> {
     const mail = renderEmail(content, this.env.appOrigin);
-    await this.prisma.mailOutbox.create({ data: { toAddress: to, ...mail } });
+    await tx.mailOutbox.create({ data: { toAddress: to, ...mail } });
   }
 
   onModuleInit() {

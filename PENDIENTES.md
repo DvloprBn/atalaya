@@ -21,8 +21,9 @@
 |---|---|---|---|
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
-## Siguiente fase (v0.3)
-- Contrato primero: rutas de administración de usuarios (listar, crear, cambiar rol, desactivar) y de roles.
-- Jerarquía estricta: nadie gestiona su mismo nivel ni uno mayor; `max_count` de director y super exigido en la base (índice parcial o candado).
-- Personal creado desde el admin: nace verificado, con contraseña temporal enviada por correo y cambio obligatorio.
-- Laboratorio v0.3: IDOR (API1), función por nivel (API5), escalada vertical.
+## Siguiente fase (v0.4)
+- Contrato primero: activar 2FA (secreto + QR), confirmar con un código, desactivar (pide contraseña y código), códigos de recuperación (10, de un solo uso, en hash).
+- Login en dos pasos: contraseña → token puente de un solo uso (jti en Redis) → código TOTP o de recuperación.
+- TOTP sin reuso del mismo código en su ventana (RFC 6238 §5.2) y con tope de intentos por cuenta.
+- El secreto TOTP cifrado en la base (AES-256-GCM, llave fuera de la base); activar 2FA cierra las demás sesiones.
+- Laboratorio v0.4: fuerza bruta del código, reuso, token puente reusado, desactivar 2FA sin la contraseña.

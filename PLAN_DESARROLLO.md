@@ -55,7 +55,7 @@ Cada fase tiene su rama `fase/v0.x-…`, un PR revisado y una etiqueta al fusion
 |---|---|---|
 | `v0.1` | Docker, CI, contrato, pre-commit, «hola» de punta a punta | Secretos, solo `127.0.0.1`, cabeceras, worker aislado, cerrado por defecto, topes |
 | `v0.2` | Registro, verificación de correo (Mailpit local; Resend del portafolio en el demo), login, refresh, logout y restablecer la contraseña | API2, API3, enumeración (texto y tiempo), pre-secuestro, reuso del refresh, logout y restablecimiento que cortan al instante, CSRF |
-| `v0.3` | 6 roles y admin de usuarios | API1, API3, API5 |
+| `v0.3` | 6 roles con jerarquía, admin de cuentas, invitaciones por correo, inventario de rutas contra el contrato | API1 (IDOR, 404), API3, API5, escalada vertical, carrera por el puesto único, sesiones que no reviven |
 | `v0.4` | 2FA TOTP y códigos de recuperación | Reuso de código, token puente de un uso |
 | `v0.5` | Google OAuth (Code + PKCE + `state` + `nonce`) | API7, API10, login CSRF |
 | `v0.6` | `security_events`, `audit_logs`, panel de seguridad, recolector de CSP | API4 (ráfagas por ruta) |

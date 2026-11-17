@@ -13,7 +13,7 @@ const LOGIN_WINDOW_S = 15 * 60;
 const MAIL_COOLDOWN_S = 60; // un correo por destinatario por minuto
 const MAIL_GLOBAL_PER_HOUR = 200; // tope global: protege la reputación del servidor de correo
 
-export type MailPurpose = 'register' | 'password_reset';
+export type MailPurpose = 'register' | 'password_reset' | 'invite';
 
 @Injectable()
 export class RateLimits {

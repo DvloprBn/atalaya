@@ -24,7 +24,7 @@ const NEEDS_SESSION = (path: string) => !path.startsWith('/api/auth/') || path =
 
 let refreshing: Promise<boolean> | null = null;
 
-async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<ApiResult<T>> {
+async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<ApiResult<T>> {
   let res = await send(method, path, body);
   // El acceso dura 10 min. Si venció (401), se pide UNA renovación y se repite una vez.
   // Varias llamadas a la vez comparten la misma renovación: si cada una renovara por
@@ -41,6 +41,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown):
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
 };
 
 function send(method: string, path: string, body?: unknown): Promise<Response> {

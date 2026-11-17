@@ -34,6 +34,11 @@ export default function AccountPage() {
           {user.role.name} (nivel {user.role.level} de 5)
         </dd>
       </dl>
+      {user.role.level >= 3 && (
+        <p>
+          <a href="/admin">Administración de cuentas</a>
+        </p>
+      )}
       <button onClick={logout}>Cerrar sesión</button>
     </main>
   );
