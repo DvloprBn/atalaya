@@ -50,6 +50,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 24 }
       - run: npm ci --no-fund
+      - name: El contrato es un OpenAPI válido
+        run: pip install openapi-spec-validator==0.9.0 && openapi-spec-validator ../contracts/openapi.yaml
       - name: Los tipos coinciden con el contrato
         run: npm run contract:types && git diff --exit-code src/lib/api-schema.d.ts
       - run: npm run typecheck
@@ -78,11 +80,25 @@ jobs:
       - name: .env de un solo uso con contraseñas aleatorias
         run: |
           sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
-              -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 24)/" .env.example > .env
+              -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 24)/" \
+              -e "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env.example > .env
       - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
       - name: Esperar a que todo responda
         run: timeout 180 bash -c 'until curl -fs http://127.0.0.1:3070/api/health; do sleep 3; done'
+      - name: Migrar la base y sembrar las cuentas de prueba
+        run: |
+          docker compose exec -T api npx prisma migrate deploy
+          docker compose exec -T api npx prisma db seed
       - run: ./scripts/smoke.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24 }
+      - name: Pruebas de seguridad contra el sistema vivo (API)
+        working-directory: api
+        run: npm ci --no-fund && npm run test:e2e
+      - name: Recorrido completo en Chrome real
+        working-directory: web
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1" }
+        run: npm ci --no-fund && npm run test:browser
       - if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail 100
       - if: always()

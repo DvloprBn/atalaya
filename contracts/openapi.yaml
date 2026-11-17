@@ -4,12 +4,15 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.1.0
+  version: 0.2.0
   license:
     name: MIT
     identifier: MIT
 servers:
   - url: /api
+# Por defecto TODA ruta exige sesión (cookie de acceso). Las públicas lo dicen con `security: []`.
+security:
+  - accessCookie: []
 paths:
   /health:
     get:
@@ -30,8 +33,222 @@ paths:
               schema: { $ref: "#/components/schemas/HealthReport" }
         "429":
           description: Se superó el tope de peticiones
+  /auth/register:
+    post:
+      operationId: register
+      summary: Pide crear una cuenta (manda un enlace de verificación)
+      description: |
+        Misma respuesta exista o no la cuenta. La cuenta NO se crea aquí: nace al abrir el enlace.
+        Tope: 5 por IP cada 15 min.
+      security: []
+      requestBody: { $ref: "#/components/requestBodies/Register" }
+      responses:
+        "202": { $ref: "#/components/responses/CheckYourEmail" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      summary: Abre el enlace de registro y crea la cuenta (un solo uso)
+      security: []
+      requestBody: { $ref: "#/components/requestBodies/Token" }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
+  /auth/login:
+    post:
+      operationId: login
+      summary: Inicia sesión; pone las cookies de acceso y de refresh
+      description: Mismo 401 para cuenta inexistente, contraseña mala, cuenta desactivada o bloqueada.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Sesión iniciada
+          headers:
+            Set-Cookie: { description: "__Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict)", schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/refresh:
+    post:
+      operationId: refresh
+      summary: Cambia el refresh (de un solo uso) por un par nuevo de cookies
+      description: Reusar un refresh ya rotado se toma como robo y cierra todas las sesiones de la cuenta.
+      security: []
+      responses:
+        "204": { description: Cookies renovadas }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Cierra la sesión (el acceso deja de servir al instante)
+      security: []
+      responses:
+        "204": { description: Sesión cerrada y cookies borradas }
+  /auth/me:
+    get:
+      operationId: me
+      summary: Quién soy (exige sesión)
+      responses:
+        "200":
+          description: El usuario de la sesión
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicUser" }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      summary: Pide un enlace para restablecer la contraseña
+      description: Misma respuesta exista o no la cuenta. Tope 3 por IP cada 15 min.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/CheckYourEmail" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      summary: Usa el enlace y fija una contraseña nueva; cierra todas las sesiones
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
 components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-atalaya_access
+  requestBodies:
+    Register:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RegisterRequest" }
+    Token:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/TokenRequest" }
+  responses:
+    CheckYourEmail:
+      description: Aceptado. El resultado real se le cuenta al dueño del correo, por correo.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Message" }
+    Message:
+      description: Hecho
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Message" }
+    Error:
+      description: Error (validación, sin sesión, tope superado…)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+      description: Se normaliza a minúsculas y sin espacios.
+    NewPassword:
+      type: string
+      minLength: 12
+      maxLength: 128
+      description: No puede contener la parte local del correo.
+    OpaqueToken:
+      type: string
+      pattern: "^[A-Za-z0-9_-]{43}$"
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        password: { $ref: "#/components/schemas/NewPassword" }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        password: { type: string, minLength: 1, maxLength: 128 }
+    EmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { $ref: "#/components/schemas/OpaqueToken" }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token: { $ref: "#/components/schemas/OpaqueToken" }
+        password: { $ref: "#/components/schemas/NewPassword" }
+    Role:
+      type: object
+      additionalProperties: false
+      required: [name, level]
+      properties:
+        name: { type: string, enum: [usuario, staff, manager, admin, director, super] }
+        level: { type: integer, minimum: 0, maximum: 5 }
+    PublicUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/Role" }
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/PublicUser" }
+    Message:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string }
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode: { type: integer }
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        error: { type: string }
     CheckState:
       type: string
       enum: [ok, down]

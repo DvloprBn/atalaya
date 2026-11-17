@@ -11,7 +11,6 @@
 	header {
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
-		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		Cross-Origin-Opener-Policy "same-origin"
 		# CSP primero en modo "solo reporte" (lección 48): se observa y luego se bloquea.
@@ -20,6 +19,17 @@
 		-Server
 		-X-Powered-By
 	}
+
+	# Las respuestas de la API (sesiones, datos de la cuenta) nunca se guardan en cachés.
+	header /api/* Cache-Control "no-store"
+
+	# Páginas que reciben un token en la URL (enlaces de correo): el token no debe
+	# salir en la cabecera Referer hacia ningún otro sitio (lección: rutas por token).
+	# Dos condiciones que se excluyen: así no importa el orden en que Caddy las aplique.
+	@token_pages path /verificar /restablecer
+	header @token_pages Referrer-Policy "no-referrer"
+	@other_pages not path /verificar /restablecer
+	header @other_pages Referrer-Policy "strict-origin-when-cross-origin"
 
 	handle /api/* {
 		reverse_proxy api:3000

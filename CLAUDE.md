@@ -17,7 +17,10 @@ Acceso seguro (parte A) + analista de datos de un negocio (parte B). Es 100 % fu
 ## Comandos
 ```bash
 docker compose up -d --build && ./scripts/smoke.sh                 # sistema completo
-cd api && npm run typecheck && npm run lint && npm test            # API
+docker compose exec api npx prisma migrate deploy && docker compose exec api npx prisma db seed
+cd api && npm run typecheck && npm run lint && npm test            # API (unitarias)
+cd api && npm run test:e2e                                          # ataques contra el sistema vivo
+cd web && npm run test:browser                                      # recorrido en Chrome real
 cd web && npm run contract:types && npm run typecheck && npm run build
 cd worker && uv run ruff check . && uv run pytest -q               # worker
 ```

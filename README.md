@@ -29,13 +29,25 @@ Navegador ──► Caddy ──► web/   Next.js       (pantallas)
 Requisitos: Docker con Compose. Opcionales: Node 24 y [uv](https://docs.astral.sh/uv/), para correr pruebas fuera de Docker.
 
 ```bash
-cp .env.example .env                    # y cambia TODAS las contraseñas (openssl rand -hex 24)
+cp .env.example .env                    # y cambia TODAS las contraseñas (openssl rand -hex 24 / -hex 32)
 git config core.hooksPath .githooks     # activa el pre-commit (secretos y .env)
 docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # crea las tablas
+docker compose exec api npx prisma db seed          # cuentas de prueba: <rol>@example.com / TestOnly123!
 ./scripts/smoke.sh                      # comprueba que funciona y que es seguro
 ```
 
-Abre <http://localhost:3070>. Solo escucha en `127.0.0.1`.
+Abre <http://localhost:3070>. Los correos de desarrollo llegan a Mailpit: <http://localhost:3071>. Todo escucha solo en `127.0.0.1`.
+
+## Pruebas
+
+| Comando | Qué prueba |
+|---|---|
+| `cd api && npm test` | Unitarias de la API (sin Docker) |
+| `cd api && npm run test:e2e` | Ataques contra el sistema vivo (ver `docs/laboratorio/`) |
+| `cd web && npm run test:browser` | El recorrido completo en Chrome real |
+| `cd worker && uv run pytest` | Worker |
+| `./scripts/smoke.sh` | Funcionamiento, cabeceras y aislamiento del sistema vivo |
 
 ## Estructura
 
@@ -45,7 +57,7 @@ Abre <http://localhost:3070>. Solo escucha en `127.0.0.1`.
 | `web/` | Next.js 16: solo pantallas |
 | `worker/` | Python 3.14 + uv: el análisis de datos |
 | `contracts/` | Los acuerdos entre piezas (OpenAPI y llaves de Redis) |
-| `docs/` | La guía de recorrido |
+| `docs/` | La guía de recorrido y el laboratorio de ataques |
 | `scripts/` | Prueba de humo contra el sistema vivo |
 
 ## Cómo estudiarlo con git
