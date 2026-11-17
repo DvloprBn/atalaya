@@ -1,0 +1,31 @@
+# Caddy: la ÚNICA puerta de entrada. Todo lo demás vive en redes internas de Docker.
+#   /api/*  → api (NestJS)
+#   el resto → web (Next.js)
+# Las cabeceras de seguridad se ponen AQUÍ, en un solo lugar, para todas las respuestas.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# CSP primero en modo "solo reporte" (lección 48): se observa y luego se bloquea.
+		# 'unsafe-eval' solo existe porque el modo desarrollo de Next lo necesita.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-Server
+		-X-Powered-By
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

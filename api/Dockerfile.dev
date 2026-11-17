@@ -1,0 +1,22 @@
+# Imagen de DESARROLLO (docker-compose.yml): el código se monta en vivo y se
+# recompila al guardar. La imagen de producción llega en v1.0 (docker-compose.prod.yml).
+FROM node:24-alpine
+
+# tini como proceso 1: reenvía SIGTERM a Node para que cierre conexiones con orden.
+RUN apk add --no-cache tini
+WORKDIR /app
+# La carpeta de trabajo es de "node": ahí escribe lo que genera (cliente de Prisma, dist/, .next/).
+RUN chown node:node /app
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund --no-audit
+
+COPY --chown=node:node . .
+# Usuario sin privilegios (uid 1000, el mismo que el dueño del código en el host).
+USER node
+EXPOSE 3000
+
+ENTRYPOINT ["tini", "--"]
+# El cliente de Prisma se genera al arrancar porque el código llega por el volumen.
+CMD ["sh", "-c", "npx prisma generate && npm run start:dev"]
