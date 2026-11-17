@@ -9,26 +9,22 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.2` (registro, verificación, login, sesiones, logout y restablecer contraseña), **construida y verificada** en la rama `fase/v0.2-registro-login`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.1). `v0.1` cerrada (etiqueta en `a214a5a`).
+**Fase actual:** `v0.2` **cerrada** (etiqueta `v0.2` = commit de fusión `24da658`, PR #2, CI 5/5). Siguiente: `v0.3` (6 roles con jerarquía y admin de usuarios) en la rama `fase/v0.3-roles-admin`.
 
-**Qué funciona (verificado el 2026-11-17 contra el sistema vivo):**
-- Migración `auth`: 6 tablas, 6 roles fijos y CHECKs; cada CHECK probado bloqueando (y 2 filas válidas aceptadas). Uno estaba mal (`NULL IN` deja pasar) y se corrigió antes de publicar la migración.
-- API: 8 rutas en `/api/auth`, correos por bandeja de salida a Mailpit; la bandeja queda con 0 bytes de cuerpo y 0 tokens tras enviar.
-- Pruebas: unitarias api 32/32 · ataques e2e 9/9 · Chrome real 1/1 · smoke 23/23 · worker 2/2. Las suites e2e y de navegador se validaron con **fallas plantadas** (3/9 y 1/1 cayeron donde debían).
-- Login: tiempos iguales para cuenta existente e inexistente (≈30 ms ambas).
-- Simulación completa del trabajo e2e del CI en local con base nueva: todo en verde.
+**Qué hay hasta v0.2 (verificado el 2026-11-17):**
+- Esqueleto (v0.1): Docker con dos redes, una sola puerta en `127.0.0.1:3070`, worker aislado, cabeceras en Caddy, contrato OpenAPI, pre-commit y CI.
+- Acceso (v0.2): registro con verificación (el usuario nace al abrir el enlace), login, sesión con acceso JWT de 10 min y refresh de un solo uso rotado, robo de refresh detectado, logout y restablecimiento que cortan al instante, sin enumeración, topes por IP, cuenta y destinatario, CSRF, Argon2id y correos por bandeja de salida (Mailpit en desarrollo).
+- Pruebas: unitarias 32 · ataques e2e 9 · Chrome real 1 · smoke 23 · worker 2. **CI 5/5 en GitHub** con las dos suites contra el sistema vivo (incluido Chrome en el servidor de GitHub).
 
-**Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.2 y `docs/laboratorio/v0.2-acceso.md`) y pide el commit.
-2. Push de la rama, PR, CI y fusión; etiqueta `v0.2`.
-3. Arranca `v0.3` (6 roles con jerarquía y admin de usuarios).
+**Siguiente paso:** v0.3. Primero el contrato (admin de usuarios y roles). Ver `PENDIENTES.md` → «Siguiente fase».
 
-**Bloqueos:** ninguno. La suite e2e solo cabe una vez cada 15 min por los topes (ver `PENDIENTES.md` S-6).
+**Bloqueos:** ninguno.
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | PR #2 fusionado con el CI 5/5 (incluidas las suites e2e y de Chrome en GitHub); etiqueta `v0.2` en `24da658`. v0.2 cerrada. |
 | 2026-11-17 | v0.2 construida y verificada (sin comitear): acceso completo, 3 suites de pruebas validadas con fallas plantadas, laboratorio de 10 ataques y capítulo v0.2 de la guía. |
 | 2026-11-17 | PR #1 fusionado por el dueño con el CI 5/5; etiqueta `v0.1` en `a214a5a`. v0.1 cerrada. |
 | 2026-11-17 | Repo público `DvloprBn/atalaya` creado por el dueño; subidas `main` (base vacía) y `fase/v0.1-esqueleto` tras escanear toda la historia. |
