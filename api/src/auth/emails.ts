@@ -56,6 +56,21 @@ export function invitation(url: string, roleName: string): EmailContent {
   };
 }
 
+/** Se vinculó Google a una cuenta que ya existía: se avisa SIEMPRE al dueño del correo. */
+export function googleLinked(forgotUrl: string): EmailContent {
+  return {
+    subject: 'Se vinculó Google a tu cuenta de Atalaya',
+    title: 'Se vinculó Google a tu cuenta',
+    paragraphs: [
+      'Alguien entró a Atalaya con Google usando este correo, y tu cuenta quedó vinculada a ese acceso.',
+      'Si fuiste tú, no hace falta que hagas nada.',
+      'Si NO fuiste tú, restablece tu contraseña ahora: eso cierra todas tus sesiones.',
+      STUDY,
+    ],
+    action: { label: 'Restablecer mi contraseña', url: forgotUrl },
+  };
+}
+
 /** Restablecer con un correo SIN cuenta: también recibe un correo (misma respuesta, mismo trabajo). */
 export function noAccountForReset(registerUrl: string): EmailContent {
   return {

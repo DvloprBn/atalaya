@@ -34,6 +34,10 @@ done
 echo "Aislamiento"
 check "el sitio solo escucha en 127.0.0.1 (no en la red local)" \
   "docker compose port caddy 80 | grep -q '^127.0.0.1:'"
+check "el servidor OAuth falso (hace de Google) solo escucha en 127.0.0.1" \
+  "docker compose port mock-idp 4000 | grep -q '^127.0.0.1:'"
+check "el login con Google está configurado (/api/auth/providers)" \
+  "curl -fsS $BASE/api/auth/providers | grep -q '\"google\":true'"
 # Se lee la configuración real del contenedor (`docker compose port` imprime ":0" en vez de nada).
 check "Mailpit (correos de desarrollo) solo escucha en 127.0.0.1" \
   "docker compose port mailpit 8025 | grep -q '^127.0.0.1:'"

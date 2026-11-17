@@ -69,3 +69,16 @@
 - **`THROTTLE_SCALE`:** los topes por IP de las rutas de acceso se multiplican en desarrollo y CI (5) porque todas las suites salen de una misma IP; en producción vale 1 y otro valor impide arrancar. El tope por cuenta no se escala. Una prueba (`zz-throttle`) comprueba que el 429 existe y nunca llega antes del valor de producción.
 - **Sin recuperación asistida por un admin** (quien pierde teléfono y códigos queda fuera) y **sin WebAuthn/passkeys**: se dejan documentados como límites en PENDIENTES.
 - El QR se entrega como SVG y se muestra dentro de un `<img>` con URI de datos (nunca como HTML).
+
+## 2026-11-17 — v0.6 (opción A elegida por el dueño)
+- **Opción A:** todo contra un **servidor OAuth falso local** (`mock-idp/`); el cliente real de Google se agrega después con solo poner seis variables `OAUTH_*` en `.env`. La opción B (probar el botón real) queda pendiente del dueño.
+- **Authorization Code + PKCE (S256) + `state` + `nonce`**, con el intento en Redis (10 min, un solo uso, solo hashes) y **atado al navegador con una cookie `__Host-` `SameSite=Lax`** (Lax y no Strict: el regreso desde Google es una navegación entre sitios).
+- **`id_token` verificado a mano** (`id-token.ts`): algoritmo fijo RS256, llave por `kid` del JWKS, tamaño de módulo ≥ 2048 bits, emisor, audiencia (+`azp`), vigencia con 60 s de tolerancia, `nonce` en tiempo constante y `email_verified === true` estricto. Escrito en vez de usar una librería: se estudia entero y no hay dependencia que auditar.
+- **Identidad por `sub`, nunca por correo** (`oauth_identities`, únicas por `(provider, subject)` y por `(user_id, provider)`). Vincular a una cuenta existente solo si su correo ya está verificado, y **siempre se avisa por correo** al dueño. Una cuenta nueva nace `usuario`, sin contraseña y verificada.
+- **El 2FA no se salta con Google:** el regreso da un reto en el fragmento (`/login#challenge=…`) y la sesión nace al canjearlo.
+- **Respuesta uniforme:** cualquier fallo → `/login?error=google`; el motivo (código fijo, sin datos) va solo al log. Destinos de redirección **fijos** (sin open redirect).
+- **Consumo seguro del proveedor:** URLs de la configuración, sin redirecciones, 5 s de tiempo límite (con prueba guardián), 64 KB, solo JSON; llaves en caché 10 min y como máximo una descarga extra cada 30 s; en producción solo HTTPS (otro valor impide arrancar).
+- **Una cuenta solo-Google no tiene contraseña:** activar el 2FA devuelve un `409` claro («crea una con ¿Olvidaste tu contraseña?»). Mejor mensaje y salida explícita que un «contraseña incorrecta».
+- **Solo el alcance `openid email`:** Atalaya no pide ningún permiso sobre la cuenta de Google.
+- **Defensa en capas, medida:** al quitar la revisión del algoritmo o la de «ya tiene otra cuenta de Google», la suite viva sigue en verde (la firma RS256 fija y la restricción única de la base lo rechazan igual) y las unitarias caen. Se mantienen **ambos** niveles de prueba.
+

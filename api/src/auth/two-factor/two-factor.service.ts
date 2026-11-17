@@ -103,6 +103,11 @@ export class TwoFactorService {
   private async reauth(userId: string, password: string, code?: string): Promise<void> {
     if (await this.limits.isTwoFactorLocked(userId)) throw denied();
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+    // Una cuenta que solo entra con Google no tiene contraseña que volver a pedir. Se le dice CLARO (es su propia
+    // cuenta, no hay nada que ocultar) y se le da la salida: crear una con «¿Olvidaste tu contraseña?».
+    if (user && user.passwordHash === null) {
+      throw new ConflictException('Tu cuenta entra con Google y no tiene contraseña. Crea una con «¿Olvidaste tu contraseña?» para poder usar esta opción.');
+    }
     // Solo si la contraseña es buena se mira (y se gasta) el código: una contraseña mala no quema códigos.
     const ok = (await verifyPassword(user?.passwordHash, password)) && (code === undefined || (await this.second.checkCode(userId, code)));
     if (!ok) {

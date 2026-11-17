@@ -9,21 +9,29 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.5` **cerrada** (etiqueta `v0.5` = commit de fusión `c35012f`, PR #5, CI 5/5). Siguiente: `v0.6` (entrar con Google) en la rama `fase/v0.6-google`.
+**Fase actual:** `v0.6` (entrar con Google), **construida y verificada** en la rama `fase/v0.6-google`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.5). `v0.1` a `v0.5` cerradas (etiqueta `v0.5` en `c35012f`).
 
-**Qué hay hasta v0.5 (verificado el 2026-11-17):**
-- Esqueleto (v0.1), acceso completo (v0.2), roles con jerarquía y admin de cuentas (v0.3), interfaz «Observatorio» (v0.4) y verificación en dos pasos con TOTP (v0.5).
-- Pruebas: unitarias 117 · ataques e2e 26 · Chrome 7 · smoke 23 · worker 2. **CI 5/5 en GitHub.**
-- La **parte A (acceso)** está completa salvo Google (v0.6) y la bitácora de seguridad (v0.7). La **parte B (análisis)** no existe todavía (v0.8 en adelante).
+**Qué hay en v0.6 (verificado el 2026-11-17 contra el sistema vivo):**
+- Opción A elegida por el dueño: todo contra un **servidor OAuth falso** local (`mock-idp/`); el cliente real de Google se agrega después con seis variables `OAUTH_*`.
+- Authorization Code + PKCE (vector oficial del RFC 7636) + `state` + `nonce`; el intento vive en Redis (10 min, un solo uso, solo hashes) atado al navegador por una cookie `__Host-` `SameSite=Lax`.
+- `id_token` verificado a mano (93 líneas): RS256 fijo, `kid`, firma, emisor, audiencia, vigencia, `nonce` y `email_verified`.
+- Vinculación por `sub` (tabla `oauth_identities`, con CHECKs y unicidades probados): vincula solo cuentas ya verificadas y avisa por correo; cuenta nueva = `usuario` sin contraseña. El 2FA no se salta. Una cuenta solo-Google recibe un `409` claro al intentar activar el 2FA.
+- Consumo seguro del proveedor: sin redirecciones, 5 s, 64 KB, solo JSON; en producción solo HTTPS (verificado en `env.spec`).
+- Pruebas: unitarias 172 · ataques e2e 53 (25 de Google, en dos archivos) · Chrome 11 · smoke 25 · worker 2. Simulación del CI con base nueva: todo en verde.
+- Fallas plantadas: sin la cookie del intento cayeron 2 pruebas (login CSRF); sin el nonce, 2; sin `email_verified`, 2. **Dos fallas (algoritmo y «ya tiene otra cuenta de Google») no las vio la suite viva** porque otra capa también las rechaza (RS256 fijo; restricción única de la base): las unitarias sí cayeron (3 y 1). Se documentó como defensa en capas.
 
-**Siguiente paso:** v0.6. Primero el contrato (inicio y retorno de Google). Ver `PENDIENTES.md` → «Siguiente fase». **Necesita del dueño** un cliente OAuth de Google (ID y secreto) para probar el flujo real; sin él, el flujo se prueba contra un servidor OAuth simulado local.
+**Siguiente paso:**
+1. El dueño revisa (guía capítulo v0.6 y `docs/laboratorio/v0.6-google.md`; prueba «Continuar con Google» en <http://localhost:3070/login>) y pide el commit.
+2. Push, PR, CI, fusión y etiqueta `v0.6`.
+3. Arranca `v0.7` (bitácoras de seguridad y panel).
 
-**Bloqueos:** ninguno para empezar; el cliente de Google decide hasta dónde se puede probar de punta a punta.
+**Bloqueos:** ninguno. Probar con Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | v0.6 construida y verificada (sin comitear): login con Google (Code + PKCE + state + nonce) contra un servidor OAuth falso, id_token verificado a mano, vinculación por sub, 25 pruebas de ataque; laboratorio de 8 secciones y capítulo v0.6. |
 | 2026-11-17 | PR #5 fusionado con el CI 5/5; etiqueta `v0.5` en `c35012f`. v0.5 cerrada. |
 | 2026-11-17 | v0.5 construida y verificada (sin comitear): 2FA TOTP a mano, secreto cifrado, reto de un solo uso, códigos de recuperación, pantalla de seguridad; laboratorio de 11 ataques y capítulo v0.5. |
 | 2026-11-17 | PR #4 fusionado con el CI 5/5; etiqueta `v0.4` en `e402831`. v0.4 cerrada. El enlace del lienzo de diseño se retiró de la rama antes del PR (reescrita con permiso del dueño). |
