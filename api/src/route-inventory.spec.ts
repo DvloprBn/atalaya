@@ -22,6 +22,7 @@ async function routesFromCode(): Promise<Route[]> {
   vi.stubEnv('APP_ORIGIN', 'http://localhost:3070');
   vi.stubEnv('SMTP_URL', 'smtp://x:1025');
   vi.stubEnv('MAIL_FROM', 'x@example.com');
+  vi.stubEnv('TOTP_ENCRYPTION_KEY', 'ab'.repeat(32));
   const { AppModule } = await import('./app.module.js');
 
   const controllers = new Set<object>();

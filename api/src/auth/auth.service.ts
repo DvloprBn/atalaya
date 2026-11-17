@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import type { SessionCookies } from './cookies.js';
 import { verifyPassword } from './passwords.js';
 import { RateLimits } from './rate-limits.js';
+import { SecondFactorService } from './two-factor/second-factor.service.js';
 import { SessionsService } from './sessions.service.js';
 
 /** Lo que el frontend puede saber del usuario. Nunca el hash ni fechas internas. */
@@ -12,19 +13,23 @@ export interface PublicUser {
   role: { name: string; level: number };
 }
 
+/** Sesión iniciada, o — si la cuenta tiene 2FA — un reto: la contraseña ya se comprobó, falta el código. */
+export type LoginResult = { tokens: SessionCookies; user: PublicUser } | { challenge: string };
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly limits: RateLimits,
     private readonly sessions: SessionsService,
+    private readonly secondFactor: SecondFactorService,
   ) {}
 
   /**
    * null = "correo o contraseña incorrectos", sin decir cuál: cuenta inexistente,
    * contraseña mala, cuenta desactivada o bloqueada por intentos se ven IGUAL.
    */
-  async login(email: string, password: string): Promise<{ tokens: SessionCookies; user: PublicUser } | null> {
+  async login(email: string, password: string): Promise<LoginResult | null> {
     // 1. Tope por cuenta ANTES de tocar la base (lección 63, regla 1). Aun bloqueada,
     //    se hace el mismo trabajo de Argon2 para que el tiempo no delate el bloqueo.
     if (await this.limits.isLoginLocked(email)) {
@@ -45,6 +50,10 @@ export class AuthService {
     }
 
     await this.limits.clearLoginFailures(email);
+    // Con 2FA NO nace una sesión todavía: solo un reto de un solo uso. La sesión nace en /auth/2fa/verify.
+    if (await this.secondFactor.isEnabled(user.id)) {
+      return { challenge: await this.secondFactor.startChallenge(user.id) };
+    }
     const tokens = await this.sessions.start(user.id);
     return { tokens, user: { id: user.id, email: user.email, role: user.role } };
   }

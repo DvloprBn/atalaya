@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.3.0
+  version: 0.5.0
   license:
     name: MIT
     identifier: MIT
@@ -68,9 +68,11 @@ paths:
             schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
         "200":
-          description: Sesión iniciada
+          description: |
+            Sesión iniciada (`user`, con cookies) o, si la cuenta tiene 2FA, un reto de un solo uso
+            (`twoFactorRequired` + `challenge`) y NINGUNA cookie: la sesión nace en `/auth/2fa/verify`.
           headers:
-            Set-Cookie: { description: "__Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict)", schema: { type: string } }
+            Set-Cookie: { description: "Solo sin 2FA: __Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict)", schema: { type: string } }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoginResponse" }
@@ -131,6 +133,98 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "400": { $ref: "#/components/responses/Error" }
+  /auth/2fa:
+    get:
+      operationId: twoFactorStatus
+      summary: Si tienes 2FA activo y cuántos códigos de recuperación te quedan
+      responses:
+        "200":
+          description: Estado del 2FA de quien pregunta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/2fa/setup:
+    post:
+      operationId: twoFactorSetup
+      summary: Empieza a activar el 2FA (pide la contraseña); devuelve el secreto y el QR
+      description: |
+        Re-autentica con la contraseña: una sesión robada no puede enlazar el autenticador del atacante.
+        El 2FA no queda activo hasta confirmarlo con un código en `/auth/2fa/enable`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordRequest" }
+      responses:
+        "200":
+          description: Secreto nuevo (pendiente de confirmar)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorSetup" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /auth/2fa/enable:
+    post:
+      operationId: twoFactorEnable
+      summary: Confirma el 2FA con un código; devuelve los códigos de recuperación (una sola vez)
+      description: Cierra todas las demás sesiones de la cuenta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/RecoveryCodes" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /auth/2fa/disable:
+    post:
+      operationId: twoFactorDisable
+      summary: Desactiva el 2FA (pide contraseña Y un código)
+      description: Cierra todas las demás sesiones de la cuenta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordAndCodeRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Error" }
+  /auth/2fa/recovery-codes:
+    post:
+      operationId: twoFactorNewRecoveryCodes
+      summary: Genera 10 códigos de recuperación nuevos (los anteriores dejan de servir)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordAndCodeRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/RecoveryCodes" }
+        "403": { $ref: "#/components/responses/Error" }
+  /auth/2fa/verify:
+    post:
+      operationId: twoFactorVerify
+      summary: "Segundo paso del login: el reto y un código (de la app o de recuperación)"
+      description: |
+        Reto de un solo uso (5 minutos, máximo 5 intentos). Un código TOTP ya usado se rechaza
+        aunque siga dentro de su ventana. Tope: 10 por IP por minuto y 10 fallos por cuenta cada 15 min.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TwoFactorVerifyRequest" }
+      responses:
+        "200":
+          description: Sesión iniciada; pone las cookies de acceso y de refresh
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginSuccess" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /auth/accept-invite:
     post:
       operationId: acceptInvite
@@ -258,6 +352,11 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/TokenRequest" }
   responses:
+    RecoveryCodes:
+      description: Los códigos nuevos. Se muestran UNA vez; la base solo guarda su hash.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RecoveryCodes" }
     AdminUser:
       description: La cuenta, como la ve el admin
       content:
@@ -340,12 +439,79 @@ components:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         role: { $ref: "#/components/schemas/Role" }
-    LoginResponse:
+    LoginSuccess:
       type: object
       additionalProperties: false
       required: [user]
       properties:
         user: { $ref: "#/components/schemas/PublicUser" }
+    TwoFactorChallenge:
+      type: object
+      additionalProperties: false
+      required: [twoFactorRequired, challenge]
+      properties:
+        twoFactorRequired: { type: boolean, enum: [true] }
+        challenge: { $ref: "#/components/schemas/OpaqueToken" }
+    LoginResponse:
+      oneOf:
+        - { $ref: "#/components/schemas/LoginSuccess" }
+        - { $ref: "#/components/schemas/TwoFactorChallenge" }
+    TwoFactorCode:
+      type: string
+      minLength: 6
+      maxLength: 32
+      description: 6 dígitos de la app, o un código de recuperación (XXXX-XXXX-XXXX-XXXX).
+    PasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1, maxLength: 128 }
+    CodeRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { $ref: "#/components/schemas/TwoFactorCode" }
+    PasswordAndCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [password, code]
+      properties:
+        password: { type: string, minLength: 1, maxLength: 128 }
+        code: { $ref: "#/components/schemas/TwoFactorCode" }
+    TwoFactorVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge, code]
+      properties:
+        challenge: { $ref: "#/components/schemas/OpaqueToken" }
+        code: { $ref: "#/components/schemas/TwoFactorCode" }
+    TwoFactorStatus:
+      type: object
+      additionalProperties: false
+      required: [enabled, recoveryCodesLeft]
+      properties:
+        enabled: { type: boolean }
+        recoveryCodesLeft: { type: integer, minimum: 0, maximum: 10 }
+    TwoFactorSetup:
+      type: object
+      additionalProperties: false
+      required: [secret, otpauthUrl, qrSvg]
+      properties:
+        secret: { type: string, description: "Base32, para escribirlo a mano en la app" }
+        otpauthUrl: { type: string }
+        qrSvg: { type: string, description: "El QR como SVG (se muestra dentro de un <img>, nunca como HTML)" }
+    RecoveryCodes:
+      type: object
+      additionalProperties: false
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { type: string }
     RoleName:
       type: string
       enum: [usuario, staff, manager, admin, director, super]

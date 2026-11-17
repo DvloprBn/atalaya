@@ -8,6 +8,9 @@ import type { components } from './api-schema';
 
 export type PublicUser = components['schemas']['PublicUser'];
 export type LoginResponse = components['schemas']['LoginResponse'];
+export type TwoFactorStatus = components['schemas']['TwoFactorStatus'];
+export type TwoFactorSetup = components['schemas']['TwoFactorSetup'];
+export type RecoveryCodes = components['schemas']['RecoveryCodes'];
 type ApiError = components['schemas']['Error'];
 
 export interface ApiResult<T> {
@@ -18,9 +21,13 @@ export interface ApiResult<T> {
   message?: string;
 }
 
-// Solo estas rutas usan la sesión y se reintentan tras renovarla. Las demás de
-// /api/auth (login, registro, la propia renovación…) no dependen de una sesión.
-const NEEDS_SESSION = (path: string) => !path.startsWith('/api/auth/') || path === '/api/auth/me';
+// Solo estas rutas usan la sesión y se reintentan tras renovarla. Las demás de /api/auth
+// (login, registro, la propia renovación…) no dependen de una sesión. El 2FA es de sesión, salvo
+// `verify`, que es la que la CREA (un 401 ahí es "código incorrecto", no "acceso vencido").
+const NEEDS_SESSION = (path: string) =>
+  !path.startsWith('/api/auth/') ||
+  path === '/api/auth/me' ||
+  (path.startsWith('/api/auth/2fa') && path !== '/api/auth/2fa/verify');
 
 let refreshing: Promise<boolean> | null = null;
 

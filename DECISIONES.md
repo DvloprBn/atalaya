@@ -57,3 +57,15 @@
 - **Roles por nombre en la API**, nunca por id. Sin borrado de cuentas: se desactivan.
 - **Inventario de rutas contra el contrato** como prueba unitaria: rutas iguales y públicas iguales.
 
+## 2026-11-17 — v0.5 (diseño de Claude, dentro de lo aprobado)
+- **TOTP escrito a mano** (`totp.ts`, ~60 líneas) en vez de una librería: se estudia entero, no hay dependencia que auditar, y se valida con los **vectores oficiales del RFC 6238** y contra `pyotp` (el gemelo en Django leerá el mismo secreto).
+- **Ventana ±1 paso (30 s)** y **anti-repetición**: solo vale un paso mayor al último aceptado, con `UPDATE` condicionado atómico. Activar el 2FA gasta el código del instante.
+- **El secreto se guarda cifrado con AES-256-GCM**, llave en el entorno (`TOTP_ENCRYPTION_KEY`, 64 hexadecimales, validada al arrancar) y el **id del usuario como dato asociado (AAD)**: un secreto no se puede mover a otra cuenta.
+- **Códigos de recuperación:** 10 de 80 bits (`XXXX-XXXX-XXXX-XXXX`), un solo uso, guardados solo con SHA-256; se muestran una vez. Regenerarlos pide contraseña y código y anula todos los anteriores.
+- **Login en dos pasos con un reto** (token puente): opaco, 5 minutos, en Redis solo su hash, canje atómico (`GETDEL`), máximo 5 intentos. La contraseña buena con 2FA activo **no crea sesión ni cookies**.
+- **Topes del segundo factor:** por reto (5), **por cuenta** (10 fallos/15 min, sin escalar) y por IP (10/min en `verify`). Todo fallo de contraseña o código en las rutas de gestión suma al mismo contador por cuenta, y el mensaje es siempre «Contraseña o código incorrectos».
+- **Activar pide la contraseña** (una sesión robada no puede enlazar el teléfono del atacante) y **cierra las demás sesiones**; **desactivar y regenerar piden contraseña y código**. Motivo nuevo de revocación: `two_factor_changed`.
+- **Un 2FA pendiente de confirmar no cuenta:** no protege ni bloquea el login.
+- **`THROTTLE_SCALE`:** los topes por IP de las rutas de acceso se multiplican en desarrollo y CI (5) porque todas las suites salen de una misma IP; en producción vale 1 y otro valor impide arrancar. El tope por cuenta no se escala. Una prueba (`zz-throttle`) comprueba que el 429 existe y nunca llega antes del valor de producción.
+- **Sin recuperación asistida por un admin** (quien pierde teléfono y códigos queda fuera) y **sin WebAuthn/passkeys**: se dejan documentados como límites en PENDIENTES.
+- El QR se entrega como SVG y se muestra dentro de un `<img>` con URI de datos (nunca como HTML).

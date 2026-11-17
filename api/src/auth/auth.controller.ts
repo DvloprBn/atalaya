@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Post, Req, Res, U
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { Public } from '../common/auth/public.decorator.js';
+import { scaled } from '../common/http/throttle.js';
 import { AuthService, type PublicUser } from './auth.service.js';
 import { clearSessionCookies, REFRESH_COOKIE, setSessionCookies } from './cookies.js';
 import { type AuthUser, CurrentUser } from './current-user.decorator.js';
@@ -30,7 +31,7 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 15 * MIN } })
+  @Throttle({ default: { limit: scaled(5), ttl: 15 * MIN } })
   @Post('register')
   @HttpCode(202)
   async register(@Body() dto: RegisterDto) {
@@ -39,7 +40,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: MIN } })
+  @Throttle({ default: { limit: scaled(10), ttl: MIN } })
   @Post('verify-email')
   @HttpCode(200)
   async verifyEmail(@Body() dto: TokenDto) {
@@ -51,18 +52,19 @@ export class AuthController {
   // del celular). La defensa fuerte contra adivinar contraseñas es el tope POR CUENTA
   // (10 fallos en 15 min, rate-limits.ts), que no depende de la IP.
   @Public()
-  @Throttle({ default: { limit: 20, ttl: MIN } })
+  @Throttle({ default: { limit: scaled(20), ttl: MIN } })
   @Post('login')
   @HttpCode(200)
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response): Promise<{ user: PublicUser }> {
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login(dto.email, dto.password);
     if (!result) throw new UnauthorizedException('Correo o contraseña incorrectos');
+    if ('challenge' in result) return { twoFactorRequired: true, challenge: result.challenge }; // sin cookies
     setSessionCookies(res, result.tokens);
     return { user: result.user };
   }
 
   @Public()
-  @Throttle({ default: { limit: 30, ttl: MIN } })
+  @Throttle({ default: { limit: scaled(30), ttl: MIN } })
   @Post('refresh')
   @HttpCode(204)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
@@ -77,7 +79,7 @@ export class AuthController {
 
   // Público a propósito: cerrar sesión debe funcionar aunque el acceso ya haya vencido.
   @Public()
-  @Throttle({ default: { limit: 30, ttl: MIN } })
+  @Throttle({ default: { limit: scaled(30), ttl: MIN } })
   @Post('logout')
   @HttpCode(204)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
@@ -92,7 +94,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 3, ttl: 15 * MIN } })
+  @Throttle({ default: { limit: scaled(3), ttl: 15 * MIN } })
   @Post('forgot-password')
   @HttpCode(202)
   async forgotPassword(@Body() dto: EmailDto) {
@@ -101,7 +103,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 15 * MIN } })
+  @Throttle({ default: { limit: scaled(5), ttl: 15 * MIN } })
   @Post('reset-password')
   @HttpCode(200)
   async resetPassword(@Body() dto: ResetPasswordDto) {
@@ -110,7 +112,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 15 * MIN } })
+  @Throttle({ default: { limit: scaled(5), ttl: 15 * MIN } })
   @Post('accept-invite')
   @HttpCode(200)
   async acceptInvite(@Body() dto: ResetPasswordDto) {

@@ -366,3 +366,101 @@ Las pruebas de v0.2 y v0.3 siguen pasando sin cambiar su lógica: buscan por **r
 | 2 | En tu sistema activa «reducir movimiento» y recarga `/login` | El radar se queda quieto |
 | 3 | Abre las herramientas del navegador → Red, recarga | Todas las peticiones van a `localhost:3070` |
 | 4 | Haz la ventana angosta (menos de 860 px) | El radar se oculta y queda una sola columna |
+
+---
+
+## Capítulo v0.5: el segundo factor (2FA con TOTP)
+
+> Lo nuevo: una contraseña robada ya no basta. Ataques y defensas, ficha por ficha, en [`laboratorio/v0.5-2fa.md`](laboratorio/v0.5-2fa.md).
+
+### 1. Preparar
+
+```bash
+# La llave que cifra los secretos del 2FA (64 hexadecimales). Va en tu .env, NUNCA en el repo:
+echo "TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # tablas two_factors y recovery_codes
+```
+
+Para probarlo necesitas una app de autenticación en el teléfono (Google Authenticator, Authy, 1Password…) o la prueba de Chrome (`npm run test:browser`), que calcula los códigos sola.
+
+### 2. Qué es TOTP, en cuatro líneas
+
+```
+secreto (20 bytes al azar, lo comparten el servidor y tu teléfono)
+paso    = segundos desde 1970 ÷ 30
+código  = HMAC-SHA1(secreto, paso) → 4 bytes → módulo 1.000.000 → 6 dígitos
+```
+
+Tu teléfono y el servidor calculan lo mismo por separado y comparan. **No se manda nada por la red** salvo el código. El archivo `api/src/auth/two-factor/totp.ts` tiene todo en ~60 líneas, y `totp.spec.ts` lo valida con los **vectores de prueba oficiales del RFC 6238**. Además se comprobó contra `pyotp` (la librería que usará el gemelo en Django): mismo secreto, mismo código.
+
+### 3. Las tablas
+
+| Tabla | Para qué |
+|---|---|
+| `two_factors` | Una fila por cuenta: el secreto **cifrado**, cuándo se confirmó y el último paso aceptado (anti-repetición). Sin `confirmed_at` está «pendiente» y no protege nada. |
+| `recovery_codes` | Los 10 códigos de recuperación, solo su hash, con `used_at` cuando se gastan. |
+
+### 4. Recorrido: activar el 2FA
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/app/cuenta/seguridad/enable-flow.tsx` | Pide la contraseña y llama a `POST /api/auth/2fa/setup`. |
+| 2 | `auth/two-factor/two-factor.service.ts` → `setup` | Vuelve a verificar la contraseña (`reauth`); crea un secreto al azar, lo **cifra** (`secret-box.ts`) y lo guarda como pendiente. Devuelve el secreto, la dirección `otpauth://…` y el QR como SVG. |
+| 3 | `enable-flow.tsx` | Muestra el QR dentro de un `<img>` (donde un SVG no puede ejecutar scripts) y la clave para escribirla a mano. |
+| 4 | `two-factor.service.ts` → `enable` | Con un código de la app, confirma el secreto **y en una transacción**: marca el 2FA activo, guarda el paso usado, crea los 10 códigos de recuperación y **cierra las demás sesiones**. |
+| 5 | `recovery-codes.tsx` | Los códigos se muestran **una sola vez**: copiar, descargar y «Ya los guardé». |
+
+### 5. Recorrido: entrar con 2FA
+
+```bash
+curl -s -X POST localhost:3070/api/auth/login -H 'content-type: application/json' \
+  -d '{"email":"…","password":"…"}'
+# {"twoFactorRequired":true,"challenge":"…43 caracteres…"}   ← y NINGUNA cookie
+```
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `auth/auth.service.ts` | Con la contraseña buena y el 2FA activo, en vez de abrir sesión pide a `Challenges` un **reto** de un solo uso. |
+| 2 | `two-factor/challenges.ts` | Guarda en Redis el id del usuario bajo el **hash** del reto, con 5 minutos de vida y un contador de intentos. |
+| 3 | `web/src/app/login/page.tsx` | Pasa al segundo paso y manda `POST /api/auth/2fa/verify` con el reto y el código. |
+| 4 | `two-factor/second-factor.service.ts` → `verifyLogin` | ¿El reto existe? ¿La cuenta no está bloqueada? ¿El código es bueno (`checkCode`)? Si no, suma un fallo a la cuenta **y** al reto. Si sí, **gasta el reto** (`GETDEL`: solo una petición lo gana), limpia los fallos y abre la sesión. |
+| 5 | `checkCode` | Un código de 6 dígitos va por TOTP (`UPDATE … WHERE last_used_step < paso`); si no, se toma como código de recuperación y se gasta por su hash. |
+
+### 6. El «token puente», explicado
+
+Entre la contraseña y el código hay un estado intermedio: «esta persona ya puso la contraseña buena, falta el código». El **reto** representa exactamente eso, y por eso se cuida tanto: no es una sesión, nace y muere en `/auth/2fa/verify`, vive 5 minutos, se gasta una sola vez, aguanta 5 intentos y en Redis solo existe su hash.
+
+### 7. Los cuatro «gastos atómicos»
+
+Casi todas las defensas de esta fase son la misma idea: **una operación condicionada que solo una petición puede ganar**, en vez de «leer, decidir, escribir» (que dos peticiones simultáneas ganarían a la vez).
+
+| Qué se gasta | Cómo |
+|---|---|
+| El reto | `GETDEL` en Redis |
+| Un código de recuperación | `UPDATE recovery_codes … WHERE code_hash = … AND used_at IS NULL` |
+| Un paso de TOTP | `UPDATE two_factors … WHERE last_used_step < paso` |
+| El 2FA pendiente al confirmarse | `UPDATE two_factors … WHERE confirmed_at IS NULL` |
+
+### 8. Experimentos
+
+| # | Haz esto | Qué deberías ver | Qué enseña |
+|---|---|---|---|
+| 1 | Activa el 2FA en <http://localhost:3070/cuenta/seguridad> con tu teléfono | Los códigos de la app coinciden con los que valida el servidor | TOTP es interoperable |
+| 2 | `docker compose exec db psql -U atalaya -c "select left(secret_enc,60) from two_factors"` | Texto como `v1.…` | El secreto no está en claro |
+| 3 | Entra, escribe 5 códigos malos y luego el bueno | Código incorrecto o vencido | El reto se destruye a los 5 intentos |
+| 4 | Entra con el código de la app y, sin esperar 30 s, repite el mismo código en otra entrada | Rechazado | Anti-repetición |
+| 5 | En `second-factor.service.ts` quita la condición `lastUsedStep: { lt: step }` y corre `npm run test:e2e` | Fallan 3 pruebas | Una prueba vale si sabe fallar |
+| 6 | En `challenges.ts` pon `MAX_TRIES = 5000` y corre `npm run test:e2e` | Falla la prueba de los 5 intentos | Cada tope tiene su prueba |
+| 7 | Quita el `key="paso-2"` del formulario en `login/page.tsx` y corre `npm run test:browser` | El campo del código aparece con el correo escrito | Un error real de React que las otras pruebas no veían |
+
+### 9. Glosario de esta fase
+
+- **TOTP:** contraseña de un solo uso basada en el tiempo (RFC 6238): el código cambia cada 30 segundos.
+- **HOTP:** la versión por contador (RFC 4226) sobre la que se construye TOTP.
+- **Paso (step):** el número del intervalo de 30 s en el que estás.
+- **AES-256-GCM:** cifrado que además **firma**: si alguien altera el texto, descifrar falla.
+- **AAD (datos asociados):** datos que no se cifran pero **sí se firman**; aquí, el id del usuario, para que un secreto no se pueda mover a otra cuenta.
+- **Anti-repetición (replay):** rechazar un código que ya se usó aunque siga dentro de su ventana.
+- **Reto (challenge):** el token de un solo uso entre la contraseña y el código.
+- **`GETDEL`:** leer y borrar una llave de Redis en un solo paso atómico.

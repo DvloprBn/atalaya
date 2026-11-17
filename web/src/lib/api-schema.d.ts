@@ -173,6 +173,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/2fa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Si tienes 2FA activo y cuántos códigos de recuperación te quedan */
+        get: operations["twoFactorStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/2fa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Empieza a activar el 2FA (pide la contraseña); devuelve el secreto y el QR
+         * @description Re-autentica con la contraseña: una sesión robada no puede enlazar el autenticador del atacante.
+         *     El 2FA no queda activo hasta confirmarlo con un código en `/auth/2fa/enable`.
+         */
+        post: operations["twoFactorSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/2fa/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirma el 2FA con un código; devuelve los códigos de recuperación (una sola vez)
+         * @description Cierra todas las demás sesiones de la cuenta.
+         */
+        post: operations["twoFactorEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/2fa/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desactiva el 2FA (pide contraseña Y un código)
+         * @description Cierra todas las demás sesiones de la cuenta.
+         */
+        post: operations["twoFactorDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/2fa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Genera 10 códigos de recuperación nuevos (los anteriores dejan de servir) */
+        post: operations["twoFactorNewRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/2fa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Segundo paso del login: el reto y un código (de la app o de recuperación)
+         * @description Reto de un solo uso (5 minutos, máximo 5 intentos). Un código TOTP ya usado se rechaza
+         *     aunque siga dentro de su ventana. Tope: 10 por IP por minuto y 10 fallos por cuenta cada 15 min.
+         */
+        post: operations["twoFactorVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/accept-invite": {
         parameters: {
             query?: never;
@@ -349,8 +465,44 @@ export interface components {
             email: string;
             role: components["schemas"]["Role"];
         };
-        LoginResponse: {
+        LoginSuccess: {
             user: components["schemas"]["PublicUser"];
+        };
+        TwoFactorChallenge: {
+            /** @enum {boolean} */
+            twoFactorRequired: true;
+            challenge: components["schemas"]["OpaqueToken"];
+        };
+        LoginResponse: components["schemas"]["LoginSuccess"] | components["schemas"]["TwoFactorChallenge"];
+        /** @description 6 dígitos de la app, o un código de recuperación (XXXX-XXXX-XXXX-XXXX). */
+        TwoFactorCode: string;
+        PasswordRequest: {
+            password: string;
+        };
+        CodeRequest: {
+            code: components["schemas"]["TwoFactorCode"];
+        };
+        PasswordAndCodeRequest: {
+            password: string;
+            code: components["schemas"]["TwoFactorCode"];
+        };
+        TwoFactorVerifyRequest: {
+            challenge: components["schemas"]["OpaqueToken"];
+            code: components["schemas"]["TwoFactorCode"];
+        };
+        TwoFactorStatus: {
+            enabled: boolean;
+            recoveryCodesLeft: number;
+        };
+        TwoFactorSetup: {
+            /** @description Base32, para escribirlo a mano en la app */
+            secret: string;
+            otpauthUrl: string;
+            /** @description El QR como SVG (se muestra dentro de un <img>, nunca como HTML) */
+            qrSvg: string;
+        };
+        RecoveryCodes: {
+            recoveryCodes: string[];
         };
         /** @enum {string} */
         RoleName: "usuario" | "staff" | "manager" | "admin" | "director" | "super";
@@ -405,6 +557,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Los códigos nuevos. Se muestran UNA vez; la base solo guarda su hash. */
+        RecoveryCodes: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["RecoveryCodes"];
+            };
+        };
         /** @description La cuenta, como la ve el admin */
         AdminUser: {
             headers: {
@@ -538,10 +699,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sesión iniciada */
+            /**
+             * @description Sesión iniciada (`user`, con cookies) o, si la cuenta tiene 2FA, un reto de un solo uso
+             *     (`twoFactorRequired` + `challenge`) y NINGUNA cookie: la sesión nace en `/auth/2fa/verify`.
+             */
             200: {
                 headers: {
-                    /** @description __Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict) */
+                    /** @description Solo sin 2FA: __Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict) */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -644,6 +808,132 @@ export interface operations {
         responses: {
             200: components["responses"]["Message"];
             400: components["responses"]["Error"];
+        };
+    };
+    twoFactorStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado del 2FA de quien pregunta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    twoFactorSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Secreto nuevo (pendiente de confirmar) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorSetup"];
+                };
+            };
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    twoFactorEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["RecoveryCodes"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    twoFactorDisable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordAndCodeRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Message"];
+            403: components["responses"]["Error"];
+        };
+    };
+    twoFactorNewRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordAndCodeRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["RecoveryCodes"];
+            403: components["responses"]["Error"];
+        };
+    };
+    twoFactorVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada; pone las cookies de acceso y de refresh */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginSuccess"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     acceptInvite: {

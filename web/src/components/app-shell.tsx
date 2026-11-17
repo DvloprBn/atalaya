@@ -27,6 +27,7 @@ export function AppShell({ user, children }: { user: PublicUser; children: React
         <Brand />
         <nav aria-label="Principal" className={styles.nav}>
           <a href="/cuenta">Mi cuenta</a>
+          <a href="/cuenta/seguridad">Seguridad</a>
           {user.role.level >= ADMIN_LEVEL && <a href="/admin">Administración de cuentas</a>}
         </nav>
         <div className={styles.who}>

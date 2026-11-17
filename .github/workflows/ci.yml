@@ -81,7 +81,8 @@ jobs:
         run: |
           sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
               -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 24)/" \
-              -e "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env.example > .env
+              -e "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" \
+              -e "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" .env.example > .env
       - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
       - name: Esperar a que todo responda
         run: timeout 180 bash -c 'until curl -fs http://127.0.0.1:3070/api/health; do sleep 3; done'

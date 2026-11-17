@@ -15,6 +15,7 @@ describe('OriginGuard (CSRF)', () => {
   vi.stubEnv('JWT_SECRET', 'x'.repeat(32));
   vi.stubEnv('SMTP_URL', 'smtp://x:1025');
   vi.stubEnv('MAIL_FROM', 'x@example.com');
+  vi.stubEnv('TOTP_ENCRYPTION_KEY', 'ab'.repeat(32));
   vi.stubEnv('APP_ORIGIN', 'http://localhost:3070');
   const guard = new OriginGuard();
 
