@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { AppShell } from '@/components/app-shell';
 import type { components } from '@/lib/api-schema';
 import { api, type PublicUser } from '@/lib/browser-api';
 import { useForm } from '@/lib/use-form';
@@ -46,17 +47,18 @@ export default function AdminPage() {
     return res;
   });
 
-  if (!me) return <main>Cargando…</main>;
+  if (!me) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (
-    <main>
-      <h1>Administración de cuentas</h1>
-      <p>
-        Entraste como {me.email} ({me.role.name}). Solo ves y gestionas cuentas de nivel menor al tuyo.
-      </p>
+    <AppShell user={me}>
+      <div className="stack" style={{ gap: 8 }}>
+        <h1>Administración de cuentas</h1>
+        <p className="muted">Solo ves y gestionas cuentas de nivel menor al tuyo ({me.role.name}).</p>
+      </div>
 
-      <h2>Invitar a una persona</h2>
-      <form onSubmit={create.onSubmit}>
+      <section className="card stack" aria-labelledby="invitar">
+      <h2 id="invitar">Invitar a una persona</h2>
+      <form onSubmit={create.onSubmit} className="row" style={{ alignItems: 'flex-end' }}>
         <label>
           Correo <input name="email" type="email" required maxLength={254} />
         </label>{' '}
@@ -73,15 +75,18 @@ export default function AdminPage() {
         <button disabled={create.busy}>Mandar invitación</button>
       </form>
       {create.result && <p role={create.result.ok ? 'status' : 'alert'}>{create.result.ok ? 'Invitación enviada.' : create.result.message}</p>}
+      </section>
 
-      <h2>Cuentas</h2>
-      <form onSubmit={(e) => (e.preventDefault(), void reload())}>
+      <section className="card stack" aria-labelledby="cuentas">
+      <h2 id="cuentas">Cuentas</h2>
+      <form onSubmit={(e) => (e.preventDefault(), void reload())} className="row" style={{ alignItems: 'flex-end' }}>
         <label>
           Buscar por correo <input value={query} onChange={(e) => setQuery(e.target.value)} maxLength={100} />
         </label>{' '}
-        <button>Buscar</button>
+        <button className="secondary">Buscar</button>
       </form>
       {page && (
+        <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
             <tr>
@@ -97,8 +102,10 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
-      {page && <p>{page.total} cuenta(s).</p>}
-    </main>
+      {page && <p className="mono muted">{page.total} cuenta(s)</p>}
+      </section>
+    </AppShell>
   );
 }

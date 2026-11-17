@@ -56,14 +56,15 @@ Cada fase tiene su rama `fase/v0.x-…`, un PR revisado y una etiqueta al fusion
 | `v0.1` | Docker, CI, contrato, pre-commit, «hola» de punta a punta | Secretos, solo `127.0.0.1`, cabeceras, worker aislado, cerrado por defecto, topes |
 | `v0.2` | Registro, verificación de correo (Mailpit local; Resend del portafolio en el demo), login, refresh, logout y restablecer la contraseña | API2, API3, enumeración (texto y tiempo), pre-secuestro, reuso del refresh, logout y restablecimiento que cortan al instante, CSRF |
 | `v0.3` | 6 roles con jerarquía, admin de cuentas, invitaciones por correo, inventario de rutas contra el contrato | API1 (IDOR, 404), API3, API5, escalada vertical, carrera por el puesto único, sesiones que no reviven |
-| `v0.4` | 2FA TOTP y códigos de recuperación | Reuso de código, token puente de un uso |
-| `v0.5` | Google OAuth (Code + PKCE + `state` + `nonce`) | API7, API10, login CSRF |
-| `v0.6` | `security_events`, `audit_logs`, panel de seguridad, recolector de CSP | API4 (ráfagas por ruta) |
-| `v0.7` | Subida segura, cola y worker con rol de base mínimo y usuario de Redis propio | Bomba zip, firma falsa, rango gigante, `.xlsm` |
-| `v0.8` | Lector de ventas, mapeo de columnas, limpieza e informe de calidad | Inyección de fórmulas al exportar |
-| `v0.9` | Informe de ventas y gastos: indicadores, Pareto, anomalías, pronóstico | Dinero en `Decimal`, zona horaria |
-| `v0.10` | CFDI XML | XXE (defusedxml) |
-| `v0.11` | PDF | Tiempo límite, PDF hostil |
+| `v0.4` | Interfaz «Observatorio»: tokens de diseño, fuentes servidas por el propio sitio, componentes (marca, radar, tarjetas) y todas las pantallas actuales | Sin recursos de terceros en tiempo de ejecución, contraste AA, movimiento reducido, mismas pruebas de navegador en verde |
+| `v0.5` | 2FA TOTP y códigos de recuperación | Reuso de código, token puente de un uso |
+| `v0.6` | Google OAuth (Code + PKCE + `state` + `nonce`) | API7, API10, login CSRF |
+| `v0.7` | `security_events`, `audit_logs`, panel de seguridad, recolector de CSP | API4 (ráfagas por ruta) |
+| `v0.8` | Subida segura, cola y worker con rol de base mínimo y usuario de Redis propio | Bomba zip, firma falsa, rango gigante, `.xlsm` |
+| `v0.9` | Lector de ventas, mapeo de columnas, limpieza e informe de calidad | Inyección de fórmulas al exportar |
+| `v0.10` | Informe de ventas y gastos: indicadores, Pareto, anomalías, pronóstico | Dinero en `Decimal`, zona horaria |
+| `v0.11` | CFDI XML | XXE (defusedxml) |
+| `v0.12` | PDF | Tiempo límite, PDF hostil |
 | `v1.0` | Demo de 24 h, datos de ejemplo, compose de producción, CSP en bloqueo, escaneo ZAP completo | OWASP Top 10 + API Top 10 completo |
 
 ## 6. Demo (v1.0)

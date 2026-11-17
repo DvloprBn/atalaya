@@ -1,0 +1,22 @@
+.radar { max-width: 100%; height: auto; }
+.ring { fill: none; stroke: #22304d; }
+.axis { stroke: var(--line); }
+.wedge { fill: var(--signal); fill-opacity: 0.12; }
+.beam { stroke: var(--signal); stroke-width: 1.5; }
+.point { fill: var(--signal); }
+.anomaly { fill: var(--anomaly); }
+
+/* El barrido gira sobre el centro del radar. Solo se anima `transform` (barato para el navegador). */
+.sweep {
+  transform-origin: 200px 200px;
+  animation: sweep 8s linear infinite;
+}
+
+@keyframes sweep {
+  to { transform: rotate(360deg); }
+}
+
+/* Quien pidió menos movimiento en su sistema ve el radar quieto. */
+@media (prefers-reduced-motion: reduce) {
+  .sweep { animation: none; }
+}

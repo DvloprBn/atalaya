@@ -5,7 +5,7 @@ Proyecto de **estudio**, construido como si fuera un sistema real. Tiene dos par
 1. **Acceso:** registro con verificación de correo, login con JWT, 6 roles con jerarquía, 2FA y Google OAuth.
 2. **Análisis:** el analista de datos de un pequeño negocio. Subes un Excel/CSV de ventas o gastos, facturas CFDI o un PDF, y Atalaya limpia los datos y te dice qué está pasando.
 
-Lo importante no es la interfaz (es un esqueleto a propósito), sino que **todo el código se pueda leer y entender de principio a fin**. Por eso:
+La interfaz sigue la dirección «Observatorio»: turquesa para lo normal, ámbar para lo anómalo, con un radar de anomalías como pieza central. Pero lo más importante es que **todo el código se pueda leer y entender de principio a fin**. Por eso:
 
 - ningún archivo pasa de ~200 líneas;
 - los comentarios explican el **porqué**, no el qué;

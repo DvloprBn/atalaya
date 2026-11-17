@@ -9,19 +9,16 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.3` (6 roles con jerarquía, panel `/admin`, invitaciones), **construida y verificada** en la rama `fase/v0.3-roles-admin`. **Sin comitear** el trabajo de la fase. `v0.1` y `v0.2` cerradas (etiquetas en `a214a5a` y `24da658`).
+**Fase actual:** `v0.4` (interfaz «Observatorio»), **construida y verificada** en la rama `fase/v0.4-interfaz`. **Sin comitear.** `v0.1`, `v0.2` y `v0.3` cerradas (etiqueta `v0.3` en `073fe40`, PR #3, CI 5/5).
 
-**Qué funciona (verificado el 2026-11-17 contra el sistema vivo):**
-- Migración `admin`: propósito `invite` y motivo `account_disabled`, con CHECKs probados (escritos sin nombrar el valor nuevo del enum: Postgres no deja usarlo en la misma transacción).
-- API: 7 rutas `/api/admin/*` (nivel admin o más) + `accept-invite`. Jerarquía estricta (404 para lo de arriba), candado de fila en cada cambio, tope de 1 director y 1 super con candado de rol, desactivar revoca sesiones.
-- Pruebas: unitarias 82 (incluye las 36 combinaciones de la jerarquía y el inventario de rutas contra el contrato) · ataques e2e 16 (9 de acceso + 7 de admin, incluida la carrera por el puesto de director) · Chrome real 3 · smoke 23 · worker 2.
-- Fallas plantadas: la regla `<` → `<=` hizo caer 10 unitarias y la de escalada e2e; reveló que la regla estaba duplicada y se unificó. El inventario de rutas falló al escribirse (faltaban las 8 rutas en el contrato) y pasó al completarlo.
-- Simulación del CI con base nueva: todo en verde.
+**Qué hay en v0.4 (verificado el 2026-11-17):**
+- Dirección A «Observatorio» elegida por el dueño entre tres (en un lienzo de diseño privado del dueño). Interfaz entra como fase propia; las siguientes se recorren una posición (2FA = v0.5).
+- Tokens en `globals.css`, fuentes con `next/font` (servidas por el sitio), componentes de marca, radar y marcos; las 9 pantallas rehechas. Revisadas con capturas en Chrome (escritorio y 390 px).
+- Pruebas en Chrome real: 6/6 (las 3 anteriores + sin terceros, sin desborde en teléfono y movimiento reducido). La de terceros se validó con una falla plantada.
 
 **Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.3 y `docs/laboratorio/v0.3-roles.md`) y pide el commit.
-2. Push, PR, CI, fusión y etiqueta `v0.3`.
-3. Arranca `v0.4` (2FA con TOTP y códigos de recuperación).
+1. Revisa la interfaz en http://localhost:3070 y pide el commit de v0.4 → PR, CI, fusión y etiqueta.
+2. Arranca `v0.5` (2FA).
 
 **Bloqueos:** ninguno.
 
@@ -29,6 +26,8 @@
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | PR #3 fusionado con el CI 5/5; etiqueta `v0.3` en `073fe40`. v0.3 cerrada. |
+| 2026-11-17 | v0.4 construida y verificada (sin comitear): interfaz «Observatorio» en todas las pantallas, 3 pruebas nuevas de interfaz. PR #3 (v0.3) con CI 5/5, pendiente de fusionar. |
 | 2026-11-17 | v0.3 construida y verificada (sin comitear): jerarquía, admin de cuentas, invitaciones, inventario de rutas; laboratorio de 9 ataques y capítulo v0.3. |
 | 2026-11-17 | PR #2 fusionado con el CI 5/5 (incluidas las suites e2e y de Chrome en GitHub); etiqueta `v0.2` en `24da658`. v0.2 cerrada. |
 | 2026-11-17 | v0.2 construida y verificada (sin comitear): acceso completo, 3 suites de pruebas validadas con fallas plantadas, laboratorio de 10 ataques y capítulo v0.2 de la guía. |

@@ -315,3 +315,54 @@ Dos capas, cada una con su trabajo:
 - **Escalada vertical:** conseguir un nivel mayor al propio.
 - **`FOR UPDATE`:** bloquea filas hasta que termina la transacción; quien llega después espera y ve el dato ya actualizado.
 - **Invitación:** cuenta creada sin contraseña que se activa con un enlace de un solo uso.
+
+---
+
+## Capítulo v0.4: la interfaz «Observatorio»
+
+> Lo nuevo: Atalaya deja de ser un esqueleto. Dirección elegida por el dueño entre tres propuestas (en un lienzo de diseño privado, fuera del repo). Ninguna regla de seguridad cambió: la interfaz solo **muestra**; quien protege sigue siendo la API.
+
+### 1. La idea en una línea
+
+Atalaya es una torre de vigía: **turquesa = lo normal**, **ámbar = lo que se sale de lo normal**. El radar de anomalías es la pieza central y, en la parte B, mostrará los días reales del negocio.
+
+### 2. Dónde vive cada cosa
+
+| Archivo | Qué hace |
+|---|---|
+| `web/src/app/globals.css` | **Todos** los tokens (colores, radios, fuentes) y los estilos base de formularios, botones, tablas y mensajes. Cambias un color aquí y cambia en todo el sitio. |
+| `web/src/app/layout.tsx` | Carga las 3 fuentes con `next/font`: se descargan **al compilar** y se sirven desde el propio sitio. |
+| `web/src/components/brand.tsx` | La marca (mini radar + nombre). |
+| `web/src/components/radar.tsx` | El radar: anillos, ejes, barrido y puntos. Recibe los puntos como dato. |
+| `web/src/components/auth-shell.tsx` | Marco de las pantallas públicas: contenido a la izquierda, radar a la derecha (se oculta en el teléfono). |
+| `web/src/components/app-shell.tsx` | Marco con sesión: barra con navegación según tu nivel, tu correo y «Cerrar sesión». |
+| `web/src/components/new-password-screen.tsx` | La pantalla de «elige una contraseña» que comparten `/restablecer` y `/bienvenida`. |
+| `*.module.css` | Estilos de UN componente. Next les cambia el nombre de clase para que no choquen con nada más. |
+
+### 3. Decisiones que enseñan algo
+
+- **Sin librerías de estilos:** CSS normal con variables. Menos cosas que aprender a la vez, y se ve exactamente qué regla pinta qué.
+- **Fuentes servidas por el propio sitio:** si el navegador las pidiera a Google, cada visita le avisaría a un tercero, y la CSP tendría que abrirse a otro dominio.
+- **Contraste medido** (comentario al inicio de `globals.css`): todo texto queda en 4.5:1 o más contra el fondo (WCAG AA).
+- **Movimiento:** el barrido del radar solo anima `transform` (barato) y se detiene con `prefers-reduced-motion`.
+- **Foco visible** en todo control (`:focus-visible`): quien navega con teclado sabe dónde está.
+- **Ocultar un enlace no protege nada:** la barra no muestra «Administración» a quien no tiene nivel, pero la que niega es la API (`@MinLevel`).
+
+### 4. Pruebas de esta fase (`web/test/interface.spec.ts`)
+
+| Promesa | Cómo se comprueba |
+|---|---|
+| Ninguna pantalla pide nada a terceros | Escucha cada petición del navegador en 4 pantallas: todas deben ir al propio sitio. **Falla plantada:** un `<link>` a Google Fonts la hizo caer. |
+| Sin desbordes en el teléfono | A 390 px, el ancho del documento no pasa del de la ventana. |
+| Movimiento reducido | Con `reducedMotion: 'reduce'`, la animación del barrido es `none`. |
+
+Las pruebas de v0.2 y v0.3 siguen pasando sin cambiar su lógica: buscan por **rol y nombre accesible** (`getByRole`, `getByLabel`), no por clases CSS, así que sobreviven a un rediseño completo.
+
+### 5. Experimentos
+
+| # | Haz esto | Qué deberías ver |
+|---|---|---|
+| 1 | En `globals.css` cambia `--signal` por `#a78bfa` | Todo lo «normal» (botones, radar, enlaces) cambia de color a la vez |
+| 2 | En tu sistema activa «reducir movimiento» y recarga `/login` | El radar se queda quieto |
+| 3 | Abre las herramientas del navegador → Red, recarga | Todas las peticiones van a `localhost:3070` |
+| 4 | Haz la ventana angosta (menos de 860 px) | El radar se oculta y queda una sola columna |

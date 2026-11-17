@@ -1,0 +1,110 @@
+/*
+ * Atalaya · dirección visual «Observatorio».
+ * TODO el lenguaje visual sale de estos tokens: si cambias un color, cambia en todo el sitio.
+ *
+ *   Turquesa (--signal)  = lo normal, lo que funciona, la acción principal.
+ *   Ámbar    (--anomaly) = lo que se sale de lo normal. Se usa con moderación: debe llamar la atención.
+ *
+ * Contraste medido contra el fondo (--bg): --text 15:1, --muted 8:1, --faint 5.6:1 (todos ≥ 4.5:1, WCAG AA).
+ */
+:root {
+  --bg: #0a0f1c;
+  --surface: #111a2e;
+  --surface-sunken: #0e1628;
+  --line: #1c2740;
+  --line-strong: #263556;
+  --text: #e6ecf5;
+  --muted: #9aa8c2;
+  --faint: #7e8daa;
+  --signal: #3dd6c4;
+  --signal-ink: #06201d;
+  --anomaly: #f5a524;
+  --danger: #ff8a8a;
+
+  --radius: 10px;
+  --gap: 16px;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-sans);
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 { font-family: var(--font-display); font-weight: 500; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(28px, 4vw, 38px); }
+h2 { font-size: 20px; }
+p { margin: 0; }
+
+a { color: var(--signal); text-underline-offset: 3px; }
+a:hover { color: #8eebdf; }
+
+/* Formularios: un solo estilo para todo el sitio. */
+label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+input, select {
+  height: 46px;
+  padding: 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+select { padding-right: 8px; }
+input::placeholder { color: var(--faint); }
+
+button, a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--signal);
+  color: var(--signal-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+a.button:hover { color: var(--signal-ink); }
+button:disabled { opacity: 0.6; cursor: progress; }
+button.secondary, a.button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line-strong); }
+
+/* El foco siempre visible: quien navega con teclado tiene que saber dónde está. */
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* Mensajes: la API manda el texto; aquí solo el color según su papel. */
+[role='alert'] { color: var(--danger); font-size: 14px; }
+[role='status'] { color: var(--signal); font-size: 14px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+
+/* Piezas pequeñas que se repiten en varias pantallas. */
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+.stack { display: flex; flex-direction: column; gap: var(--gap); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 999px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+}
+.chip[data-state='ok']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
+.chip[data-state='down']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--anomaly); }

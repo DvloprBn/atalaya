@@ -1,0 +1,39 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+}
+
+.content {
+  padding: 48px clamp(20px, 5vw, 56px);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  border-right: 1px solid var(--line);
+}
+
+.footer { margin-top: auto; font-size: 12px; color: var(--faint); }
+
+.scope {
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+  background: var(--surface-sunken);
+}
+
+.facts { list-style: none; margin: 0; padding: 0; display: flex; gap: 24px; font-size: 13px; color: var(--muted); }
+.facts li { display: flex; align-items: center; gap: 8px; }
+.dotSignal, .dotAnomaly { width: 10px; height: 10px; border-radius: 50%; }
+.dotSignal { background: var(--signal); }
+.dotAnomaly { background: var(--anomaly); }
+
+/* Teléfono: una sola columna, sin el radar (el contenido es lo importante). */
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .content { border-right: 0; }
+  .scope { display: none; }
+}

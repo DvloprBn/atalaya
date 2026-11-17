@@ -41,6 +41,11 @@
 - Login: tope por IP de 20 por minuto (antes 10): varias personas comparten IP (oficina, red del celular); la defensa principal contra adivinar contraseñas es el tope por cuenta.
 - En CI la migración y la semilla son pasos explícitos (`prisma migrate deploy`, `db seed`); la API no migra sola al arrancar (lección 146).
 
+## 2026-11-17 — Cambio del dueño: Atalaya SÍ lleva interfaz
+- Reemplaza «sin UX/UI, solo el esqueleto». El dueño (tras cerrar v0.3): una interfaz **innovadora, tecnológica, que parezca de ciencia de datos, llamativa y relativamente sencilla**. Dirección visual por elegir entre tres propuestas originales.
+- **Elegida la dirección A, «Observatorio»** (2026-11-17): fondo azul noche, turquesa para lo normal y ámbar para lo anómalo, cifras en monoespaciada, radar de anomalías como pieza central. Las tres viven en un lienzo de diseño privado del dueño (fuera del repo).
+- **La interfaz es su propia fase, `v0.4`**, antes del 2FA (recomendación de Claude, aplicada sin objeción del dueño): las fases siguientes se recorren una posición; la demo sigue en `v1.0`.
+
 ## 2026-11-17 — v0.3 (diseño de Claude, dentro de lo aprobado)
 - **Jerarquía estricta:** solo se ve y se gestiona lo de nivel menor al propio; nadie se gestiona a sí mismo. La regla vive en `admin/hierarchy.ts` (en memoria y como filtro de Prisma, con una prueba que exige que coincidan).
 - **Dos capas:** `@MinLevel` + `RolesGuard` para la función (403) y la jerarquía para los objetos (404, para no confirmar que existen).

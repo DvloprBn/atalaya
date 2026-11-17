@@ -1,0 +1,8 @@
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; align-items: start; }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 20px; margin: 0; }
+.facts dt { color: var(--muted); font-size: 13px; }
+.facts dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+
+.preview { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+.preview p { flex: 1 1 200px; font-size: 14px; }

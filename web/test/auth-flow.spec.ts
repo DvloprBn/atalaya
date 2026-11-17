@@ -38,7 +38,7 @@ test('registro, confirmación, sesión con renovación automática y salida', as
   await page.getByLabel('Contraseña').fill(password);
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByRole('heading', { name: 'Mi cuenta' })).toBeVisible();
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Perfil' }).getByText(email)).toBeVisible();
 
   // Las cookies son las que prometimos: httpOnly, Secure y SameSite=Strict.
   const cookies = await context.cookies();
@@ -50,7 +50,7 @@ test('registro, confirmación, sesión con renovación automática y salida', as
   // Simula que pasaron 10 minutos: el acceso desaparece. La página debe renovarlo sola.
   await context.clearCookies({ name: '__Host-atalaya_access' });
   await page.reload();
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Perfil' }).getByText(email)).toBeVisible();
 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await page.waitForURL('**/');
