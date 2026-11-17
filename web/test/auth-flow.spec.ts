@@ -3,23 +3,10 @@
 //
 //   docker compose up -d --build && npm run test:browser
 import { expect, test } from '@playwright/test';
+import { mailLink } from './helpers';
 
-const MAILPIT_URL = process.env.MAILPIT_URL ?? 'http://127.0.0.1:3071';
 const email = `ui-${Date.now()}@example.com`;
 const password = 'una frase larga para el navegador';
-
-async function mailLink(to: string, subject: string): Promise<string> {
-  const query = encodeURIComponent(`to:"${to}" subject:"${subject}"`);
-  for (let i = 0; i < 30; i++) {
-    const found = await (await fetch(`${MAILPIT_URL}/api/v1/search?query=${query}`)).json();
-    if (found.messages?.[0]) {
-      const message = await (await fetch(`${MAILPIT_URL}/api/v1/message/${found.messages[0].ID}`)).json();
-      return /https?:\/\/\S+token=[A-Za-z0-9_-]{43}/.exec(message.Text)![0];
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error(`No llegó "${subject}" a ${to}`);
-}
 
 test('registro, confirmación, sesión con renovación automática y salida', async ({ page, context }) => {
   await page.goto('/registro');

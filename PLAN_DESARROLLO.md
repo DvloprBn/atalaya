@@ -57,7 +57,7 @@ Cada fase tiene su rama `fase/v0.x-…`, un PR revisado y una etiqueta al fusion
 | `v0.2` | Registro, verificación de correo (Mailpit local; Resend del portafolio en el demo), login, refresh, logout y restablecer la contraseña | API2, API3, enumeración (texto y tiempo), pre-secuestro, reuso del refresh, logout y restablecimiento que cortan al instante, CSRF |
 | `v0.3` | 6 roles con jerarquía, admin de cuentas, invitaciones por correo, inventario de rutas contra el contrato | API1 (IDOR, 404), API3, API5, escalada vertical, carrera por el puesto único, sesiones que no reviven |
 | `v0.4` | Interfaz «Observatorio»: tokens de diseño, fuentes servidas por el propio sitio, componentes (marca, radar, tarjetas) y todas las pantallas actuales | Sin recursos de terceros en tiempo de ejecución, contraste AA, movimiento reducido, mismas pruebas de navegador en verde |
-| `v0.5` | 2FA TOTP y códigos de recuperación | Reuso de código, token puente de un uso |
+| `v0.5` | 2FA TOTP (escrito a mano, validado con los vectores del RFC 6238), códigos de recuperación, login en dos pasos con reto de un solo uso, activar/desactivar/regenerar con contraseña y código | Fuerza bruta del código, reuso (replay), reto reusado, carreras, secreto cifrado, sesión robada |
 | `v0.6` | Google OAuth (Code + PKCE + `state` + `nonce`) | API7, API10, login CSRF |
 | `v0.7` | `security_events`, `audit_logs`, panel de seguridad, recolector de CSP | API4 (ráfagas por ruta) |
 | `v0.8` | Subida segura, cola y worker con rol de base mínimo y usuario de Redis propio | Bomba zip, firma falsa, rango gigante, `.xlsm` |

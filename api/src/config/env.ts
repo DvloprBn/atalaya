@@ -12,6 +12,10 @@ export interface Env {
   /** Servidor de correo: smtp://mailpit:1025 en local; smtps://usuario:llave@host:465 en el demo. */
   smtpUrl: string;
   mailFrom: string;
+  /** Llave AES-256 (64 hexadecimales) con la que se cifran los secretos TOTP. Vive en el entorno, nunca en la base. */
+  totpEncryptionKey: string;
+  /** Multiplica los topes por IP de las rutas de acceso. 1 en producción (ver common/http/throttle.ts). */
+  throttleScale: number;
 }
 
 let cached: Env | undefined;
@@ -27,12 +31,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     appOrigin: required(source, 'APP_ORIGIN'),
     smtpUrl: required(source, 'SMTP_URL'),
     mailFrom: required(source, 'MAIL_FROM'),
+    totpEncryptionKey: required(source, 'TOTP_ENCRYPTION_KEY'),
+    throttleScale: Number(source.THROTTLE_SCALE ?? 1),
   };
   if (!Number.isInteger(env.port) || env.port <= 0) {
     throw new Error('PORT debe ser un entero positivo');
   }
   if (env.jwtSecret.length < 32) {
     throw new Error('JWT_SECRET debe tener al menos 32 caracteres');
+  }
+  if (!/^[0-9a-f]{64}$/i.test(env.totpEncryptionKey)) {
+    throw new Error('TOTP_ENCRYPTION_KEY debe ser de 64 caracteres hexadecimales (openssl rand -hex 32)');
+  }
+  if (!Number.isInteger(env.throttleScale) || env.throttleScale < 1 || env.throttleScale > 20) {
+    throw new Error('THROTTLE_SCALE debe ser un entero de 1 a 20');
+  }
+  if (source.NODE_ENV === 'production' && env.throttleScale !== 1) {
+    throw new Error('En producción THROTTLE_SCALE debe ser 1: los topes por IP no se aflojan');
   }
   // Solo el origen (esquema + host + puerto), sin ruta ni barra final: se compara tal cual contra Origin.
   if (new URL(env.appOrigin).origin !== env.appOrigin) {

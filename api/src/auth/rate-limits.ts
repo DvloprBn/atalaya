@@ -10,6 +10,7 @@ import { sha256 } from './tokens.js';
 
 const LOGIN_MAX_FAILURES = 10;
 const LOGIN_WINDOW_S = 15 * 60;
+const TWO_FACTOR_MAX_FAILURES = 10;
 const MAIL_COOLDOWN_S = 60; // un correo por destinatario por minuto
 const MAIL_GLOBAL_PER_HOUR = 200; // tope global: protege la reputación del servidor de correo
 
@@ -34,6 +35,21 @@ export class RateLimits {
     await this.redis.client.del(this.loginKey(email));
   }
 
+  // Segundo factor: otro contador por CUENTA (no por IP), para códigos de la app, de recuperación
+  // y la contraseña que se vuelve a pedir al activar o desactivar el 2FA. 10 fallos en 15 min.
+  async isTwoFactorLocked(userId: string): Promise<boolean> {
+    return Number(await this.redis.client.get(this.twoFactorKey(userId))) >= TWO_FACTOR_MAX_FAILURES;
+  }
+
+  async recordTwoFactorFailure(userId: string): Promise<void> {
+    const key = this.twoFactorKey(userId);
+    await this.redis.client.multi().incr(key).expire(key, LOGIN_WINDOW_S, 'NX').exec();
+  }
+
+  async clearTwoFactorFailures(userId: string): Promise<void> {
+    await this.redis.client.del(this.twoFactorKey(userId));
+  }
+
   /**
    * ¿Se puede mandar un correo de este tipo a esta dirección ahora? Tope por
    * destinatario Y propósito (un correo de verificación no bloquea el de
@@ -48,6 +64,10 @@ export class RateLimits {
       [Error | null, number],
     ];
     return sent <= MAIL_GLOBAL_PER_HOUR;
+  }
+
+  private twoFactorKey(userId: string): string {
+    return `atalaya:2fa-fail:${sha256(userId)}`;
   }
 
   private loginKey(email: string): string {

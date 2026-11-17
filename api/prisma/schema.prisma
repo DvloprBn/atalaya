@@ -41,6 +41,8 @@ model User {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions        Session[]
   emailTokens     EmailToken[]
+  twoFactor       TwoFactor?
+  recoveryCodes   RecoveryCode[]
 
   @@map("users")
 }
@@ -56,7 +58,7 @@ model Session {
   /// Vida absoluta: pasada esta fecha hay que volver a escribir la contraseña.
   expiresAt     DateTime       @map("expires_at") @db.Timestamptz(3)
   revokedAt     DateTime?      @map("revoked_at") @db.Timestamptz(3)
-  /// logout | password_reset | reuse_detected | account_disabled (CHECK en la base).
+  /// logout | password_reset | reuse_detected | account_disabled | two_factor_changed (CHECK en la base).
   revokedReason String?        @map("revoked_reason") @db.VarChar(32)
   refreshTokens RefreshToken[]
 
@@ -138,4 +140,32 @@ model MailOutbox {
 
   @@index([status, nextAttemptAt])
   @@map("mail_outbox")
+}
+
+/// El segundo factor (TOTP) de una cuenta. Nace "pendiente" (confirmedAt = null) al empezar a
+/// activarlo y solo cuenta como activo cuando la persona demuestra que su app genera códigos.
+model TwoFactor {
+  userId       String    @id @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// El secreto TOTP, cifrado con AES-256-GCM (ver two-factor/secret-box.ts). Nunca en claro.
+  secretEnc    String    @map("secret_enc")
+  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  /// Último paso de 30 s aceptado: un código ya usado no se acepta otra vez (RFC 6238 §5.2).
+  lastUsedStep Int?      @map("last_used_step")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("two_factors")
+}
+
+/// Códigos de un solo uso para entrar si se pierde el teléfono. Se guarda solo su SHA-256.
+model RecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique @map("code_hash") @db.Char(64)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("recovery_codes")
 }

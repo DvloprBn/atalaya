@@ -12,7 +12,7 @@ const ACCESS_TTL_S = 10 * 60;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // vida absoluta de una sesión
 const REUSE_GRACE_MS = 10_000;
 
-export type RevokeReason = 'logout' | 'password_reset' | 'reuse_detected' | 'account_disabled';
+export type RevokeReason = 'logout' | 'password_reset' | 'reuse_detected' | 'account_disabled' | 'two_factor_changed';
 
 export interface AccessClaims {
   sub: string; // id del usuario
@@ -77,9 +77,10 @@ export class SessionsService {
     });
   }
 
-  async revokeAllForUser(userId: string, reason: RevokeReason, tx: Tx = this.prisma): Promise<void> {
+  /** `exceptSessionId`: la sesión desde la que se hace el cambio (activar 2FA) no se cierra a sí misma. */
+  async revokeAllForUser(userId: string, reason: RevokeReason, tx: Tx = this.prisma, exceptSessionId?: string): Promise<void> {
     await tx.session.updateMany({
-      where: { userId, revokedAt: null },
+      where: { userId, revokedAt: null, ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}) },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
   }
