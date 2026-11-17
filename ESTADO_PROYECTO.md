@@ -9,29 +9,22 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-17
 
-**Fase actual:** `v0.5` (2FA con TOTP), **construida y verificada** en la rama `fase/v0.5-2fa`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.4). `v0.1` a `v0.4` cerradas (etiqueta `v0.4` en `e402831`).
+**Fase actual:** `v0.5` **cerrada** (etiqueta `v0.5` = commit de fusión `c35012f`, PR #5, CI 5/5). Siguiente: `v0.6` (entrar con Google) en la rama `fase/v0.6-google`.
 
-**Qué hay en v0.5 (verificado el 2026-11-17 contra el sistema vivo):**
-- Migración `two_factor`: tablas `two_factors` y `recovery_codes` y el motivo `two_factor_changed`, con CHECKs probados uno por uno.
-- TOTP escrito a mano: valida con los 6 vectores oficiales del RFC 6238 y coincide con `pyotp` con un secreto al azar.
-- Secreto cifrado AES-256-GCM con el id del usuario como dato asociado (verificado en la base: `v1.<iv>.<etiqueta>.<texto>`); códigos de recuperación guardados solo como hash.
-- Login en dos pasos con reto de un solo uso; activar/desactivar/regenerar con contraseña y código; activar cierra las demás sesiones.
-- Interfaz: login en dos pasos y `/cuenta/seguridad` (QR, códigos de recuperación, administrar). Se corrigió un error real que mostraban las capturas: el campo del código arrastraba el correo del paso anterior.
-- Pruebas: unitarias 117 · ataques e2e 26 (+11 de 2FA, incluidas 2 de carrera, y 1 de tope) · Chrome 7 · smoke 23 · worker 2. Simulación del CI con base nueva: todo en verde.
-- Fallas plantadas: sin anti-repetición cayeron 3 pruebas; sin gasto del reto, 4 (y solo la carrera con códigos distintos distingue ese caso); tope del reto en 5000, 1; login que ignora el reto, la de Chrome.
-- Nuevo `THROTTLE_SCALE` (5 en desarrollo y CI, 1 obligatorio en producción): las suites comparten una IP y ya rozaban el tope de entradas por minuto.
+**Qué hay hasta v0.5 (verificado el 2026-11-17):**
+- Esqueleto (v0.1), acceso completo (v0.2), roles con jerarquía y admin de cuentas (v0.3), interfaz «Observatorio» (v0.4) y verificación en dos pasos con TOTP (v0.5).
+- Pruebas: unitarias 117 · ataques e2e 26 · Chrome 7 · smoke 23 · worker 2. **CI 5/5 en GitHub.**
+- La **parte A (acceso)** está completa salvo Google (v0.6) y la bitácora de seguridad (v0.7). La **parte B (análisis)** no existe todavía (v0.8 en adelante).
 
-**Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.5 y `docs/laboratorio/v0.5-2fa.md`, y prueba el 2FA con su teléfono) y pide el commit.
-2. Push, PR, CI, fusión y etiqueta `v0.5`.
-3. Arranca `v0.6` (Google OAuth).
+**Siguiente paso:** v0.6. Primero el contrato (inicio y retorno de Google). Ver `PENDIENTES.md` → «Siguiente fase». **Necesita del dueño** un cliente OAuth de Google (ID y secreto) para probar el flujo real; sin él, el flujo se prueba contra un servidor OAuth simulado local.
 
-**Bloqueos:** ninguno.
+**Bloqueos:** ninguno para empezar; el cliente de Google decide hasta dónde se puede probar de punta a punta.
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-17 | PR #5 fusionado con el CI 5/5; etiqueta `v0.5` en `c35012f`. v0.5 cerrada. |
 | 2026-11-17 | v0.5 construida y verificada (sin comitear): 2FA TOTP a mano, secreto cifrado, reto de un solo uso, códigos de recuperación, pantalla de seguridad; laboratorio de 11 ataques y capítulo v0.5. |
 | 2026-11-17 | PR #4 fusionado con el CI 5/5; etiqueta `v0.4` en `e402831`. v0.4 cerrada. El enlace del lienzo de diseño se retiró de la rama antes del PR (reescrita con permiso del dueño). |
 | 2026-11-17 | PR #3 fusionado con el CI 5/5; etiqueta `v0.3` en `073fe40`. v0.3 cerrada. |
