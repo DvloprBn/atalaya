@@ -1,0 +1,6 @@
+.brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); width: max-content; }
+.brand:hover { color: var(--text); }
+.ring { fill: none; stroke: var(--signal); }
+.wedge { fill: var(--signal); fill-opacity: 0.35; }
+.blip { fill: var(--anomaly); }
+.word { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.18em; }

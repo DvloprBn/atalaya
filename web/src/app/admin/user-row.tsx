@@ -18,7 +18,7 @@ export function UserRow({ user, roles, onChanged }: { user: AdminUser; roles: As
 
   return (
     <tr>
-      <td>{user.email}</td>
+      <td className="mono">{user.email}</td>
       <td>
         {/* `key` con el rol: si el servidor rechaza el cambio, el selector vuelve al valor real. */}
         <select
@@ -34,12 +34,16 @@ export function UserRow({ user, roles, onChanged }: { user: AdminUser; roles: As
           ))}
         </select>
       </td>
-      <td>{{ active: 'activa', invited: 'invitada', disabled: 'desactivada' }[user.status]}</td>
+      <td>
+        <span className="chip" data-state={user.status === 'active' ? 'ok' : user.status === 'disabled' ? 'down' : undefined}>
+          {{ active: 'activa', invited: 'invitada', disabled: 'desactivada' }[user.status]}
+        </span>
+      </td>
       <td>
         {user.status === 'disabled' ? (
-          <button onClick={() => void run(api.post(`/api/admin/users/${user.id}/enable`))}>Reactivar</button>
+          <button className="secondary" onClick={() => void run(api.post(`/api/admin/users/${user.id}/enable`))}>Reactivar</button>
         ) : (
-          <button onClick={() => void run(api.post(`/api/admin/users/${user.id}/disable`))}>Desactivar</button>
+          <button className="secondary" onClick={() => void run(api.post(`/api/admin/users/${user.id}/disable`))}>Desactivar</button>
         )}
         {error && <span role="alert"> {error}</span>}
       </td>

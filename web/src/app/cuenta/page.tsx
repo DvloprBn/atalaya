@@ -1,10 +1,13 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { AppShell } from '@/components/app-shell';
+import { Radar } from '@/components/radar';
 import { api, type PublicUser } from '@/lib/browser-api';
+import styles from './cuenta.module.css';
 
-// Página protegida. La protección REAL es la API: aunque alguien viera esta
-// pantalla, sin sesión /api/auth/me responde 401 y aquí no hay datos que mostrar.
+// Página protegida. La protección REAL es la API: sin sesión, /api/auth/me
+// responde 401 y aquí no hay datos que mostrar.
 export default function AccountPage() {
   const router = useRouter();
   const [user, setUser] = useState<PublicUser | null>(null);
@@ -16,30 +19,38 @@ export default function AccountPage() {
     });
   }, [router]);
 
-  async function logout() {
-    await api.post('/api/auth/logout');
-    router.push('/');
-  }
-
-  if (!user) return <main>Cargando…</main>;
+  if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (
-    <main>
+    <AppShell user={user}>
       <h1>Mi cuenta</h1>
-      <dl>
-        <dt>Correo</dt>
-        <dd>{user.email}</dd>
-        <dt>Rol</dt>
-        <dd>
-          {user.role.name} (nivel {user.role.level} de 5)
-        </dd>
-      </dl>
-      {user.role.level >= 3 && (
-        <p>
-          <a href="/admin">Administración de cuentas</a>
-        </p>
-      )}
-      <button onClick={logout}>Cerrar sesión</button>
-    </main>
+      <div className={styles.grid}>
+        <section className="card stack" aria-labelledby="perfil">
+          <h2 id="perfil">Perfil</h2>
+          <dl className={styles.facts}>
+            <dt>Correo</dt>
+            <dd>{user.email}</dd>
+            <dt>Rol</dt>
+            <dd>
+              {user.role.name} <span className="muted">(nivel {user.role.level} de 5)</span>
+            </dd>
+          </dl>
+        </section>
+
+        <section className="card stack" aria-labelledby="analisis">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2 id="analisis">Panel de análisis</h2>
+            <span className="chip">vista previa · datos de ejemplo</span>
+          </div>
+          <div className={styles.preview}>
+            <Radar size={240} label="Vista previa del radar de anomalías con datos de ejemplo" />
+            <p className="muted">
+              Aquí verás tus ventas en el radar: cada punto es un día y los que brillan en ámbar se salen de lo
+              normal. Llega con la parte de análisis (v0.8 en adelante).
+            </p>
+          </div>
+        </section>
+      </div>
+    </AppShell>
   );
 }

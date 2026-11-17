@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { AuthShell } from '@/components/auth-shell';
 import { api, type ApiResult } from '@/lib/browser-api';
 import { useUrlToken } from '@/lib/use-url-token';
 
@@ -16,17 +17,19 @@ export default function VerifyPage() {
     void api.post('/api/auth/verify-email', { token }).then(setResult);
   }, [token]);
 
-  if (token === null) return <Page message="Este enlace no trae un código de verificación." />;
-  if (!result) return <Page message="Confirmando tu correo…" />;
-  return <Page message={result.message ?? ''} done={result.ok} />;
+  if (token === null) return <Screen message="Este enlace no trae un código de verificación." />;
+  if (!result) return <Screen message="Confirmando tu correo…" />;
+  return <Screen message={result.message ?? ''} done={result.ok} />;
 }
 
-function Page({ message, done = false }: { message: string; done?: boolean }) {
+function Screen({ message, done = false }: { message: string; done?: boolean }) {
   return (
-    <main>
-      <h1>Confirmar correo</h1>
-      <p role="status">{message}</p>
-      {done ? <a href="/login">Iniciar sesión</a> : <a href="/registro">Volver a registrarme</a>}
-    </main>
+    <AuthShell>
+      <div className="stack">
+        <h1>Confirmar correo</h1>
+        <p role="status">{message}</p>
+        {done ? <a href="/login">Iniciar sesión →</a> : <a href="/registro">Volver a registrarme</a>}
+      </div>
+    </AuthShell>
   );
 }
