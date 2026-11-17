@@ -15,6 +15,8 @@ check "/api/health responde 200 con todo en ok" \
   "curl -fsS $BASE/api/health | grep -q '{\"status\":\"ok\",\"checks\":{\"database\":\"ok\",\"redis\":\"ok\",\"worker\":\"ok\"}}'"
 check "la página principal muestra el estado que le dio la API" \
   "curl -fsS $BASE/ | grep -q 'Estado del sistema'"
+check "una ruta protegida sin sesión responde 401 (cerrado por defecto)" \
+  "[ \"\$(curl -s -o /dev/null -w '%{http_code}' $BASE/api/auth/me)\" = 401 ]"
 check "una ruta de la API que no existe responde 404, no 500" \
   "[ \"\$(curl -s -o /dev/null -w '%{http_code}' $BASE/api/no-existe)\" = 404 ]"
 
@@ -33,6 +35,8 @@ echo "Aislamiento"
 check "el sitio solo escucha en 127.0.0.1 (no en la red local)" \
   "docker compose port caddy 80 | grep -q '^127.0.0.1:'"
 # Se lee la configuración real del contenedor (`docker compose port` imprime ":0" en vez de nada).
+check "Mailpit (correos de desarrollo) solo escucha en 127.0.0.1" \
+  "docker compose port mailpit 8025 | grep -q '^127.0.0.1:'"
 check "la base no tiene puerto publicado" \
   "[ \"\$(docker inspect --format '{{json .HostConfig.PortBindings}}' \$(docker compose ps -q db))\" = '{}' ]"
 check "el worker NO tiene salida a internet" \

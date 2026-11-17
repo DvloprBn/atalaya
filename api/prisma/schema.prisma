@@ -1,6 +1,6 @@
-// Schema de Atalaya. En v0.1 todavía no hay tablas: la primera migración
-// (usuarios y roles) llega en v0.2. La API ya habla con PostgreSQL desde hoy
-// para que /api/health demuestre la conexión de punta a punta.
+// Schema de Atalaya. Convención: nombres en inglés y en plural en la base
+// (`users`), en singular en el código (`User`). Las reglas que Prisma no sabe
+// expresar (CHECK, filas fijas) viven como SQL dentro de cada migración.
 
 generator client {
   provider     = "prisma-client"
@@ -11,4 +11,129 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+/// Los 6 niveles de permiso (0 = usuario … 5 = super). Filas FIJAS: las siembra
+/// la migración, no el código. `maxCount` = cuántas cuentas puede haber (null = sin límite).
+model Role {
+  id       Int     @id
+  name     String  @unique @db.VarChar(20)
+  level    Int     @unique
+  maxCount Int?    @map("max_count")
+  users    User[]
+
+  @@map("roles")
+}
+
+/// Una persona, una cuenta. Solo existe cuando su correo ya se verificó (ver EmailToken).
+model User {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  /// Siempre en minúsculas (lo exige un CHECK en la base).
+  email           String    @unique @db.VarChar(254)
+  /// Argon2id. Será null en cuentas que solo entran con Google (v0.5).
+  passwordHash    String?   @map("password_hash")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  roleId          Int       @map("role_id")
+  role            Role      @relation(fields: [roleId], references: [id])
+  /// Cuenta desactivada: no entra y sus sesiones dejan de servir al instante.
+  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions        Session[]
+  emailTokens     EmailToken[]
+
+  @@map("users")
+}
+
+/// Una sesión = un inicio de sesión en un dispositivo. Agrupa la "familia" de
+/// refresh tokens que se van rotando. Se revisa en CADA petición: revocarla
+/// corta el acceso al instante, aunque el token de acceso no haya vencido.
+model Session {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Vida absoluta: pasada esta fecha hay que volver a escribir la contraseña.
+  expiresAt     DateTime       @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime?      @map("revoked_at") @db.Timestamptz(3)
+  /// logout | password_reset | reuse_detected (CHECK en la base).
+  revokedReason String?        @map("revoked_reason") @db.VarChar(32)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Cada refresh token sirve UNA vez: al usarse se marca `rotatedAt` y nace otro.
+/// Si vuelve a aparecer uno ya rotado, alguien lo robó (ver sessions.service.ts).
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  sessionId String    @map("session_id") @db.Uuid
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// SHA-256 del token: la base nunca guarda el token mismo.
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(3)
+
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+enum EmailTokenPurpose {
+  register
+  password_reset
+
+  @@map("email_token_purpose")
+}
+
+/// Enlaces de un solo uso enviados por correo. Un propósito por enlace: el de
+/// registro no sirve para restablecer la contraseña, ni al revés.
+model EmailToken {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  purpose      EmailTokenPurpose
+  email        String            @db.VarChar(254)
+  /// Solo en password_reset (en registro el usuario todavía no existe).
+  userId       String?           @map("user_id") @db.Uuid
+  user         User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Solo en register: la contraseña elegida, ya en hash. Se copia al usuario al verificar.
+  passwordHash String?           @map("password_hash")
+  tokenHash    String            @unique @map("token_hash") @db.Char(64)
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(3)
+  usedAt       DateTime?         @map("used_at") @db.Timestamptz(3)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email])
+  @@map("email_tokens")
+}
+
+enum MailStatus {
+  pending
+  sending
+  sent
+  failed
+
+  @@map("mail_status")
+}
+
+/// Bandeja de salida (lección 226): quien quiere mandar un correo solo crea una
+/// fila; un despachador la envía con reintentos. Así ninguna respuesta de la API
+/// espera al servidor de correo (y no se puede medir por el tiempo si hubo envío).
+model MailOutbox {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  toAddress     String     @map("to_address") @db.VarChar(254)
+  subject       String     @db.VarChar(200)
+  /// Se vacían al enviarse: los enlaces con token no se quedan guardados.
+  text          String
+  html          String
+  status        MailStatus @default(pending)
+  attempts      Int        @default(0)
+  nextAttemptAt DateTime   @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedAt      DateTime?  @map("locked_at") @db.Timestamptz(3)
+  sentAt        DateTime?  @map("sent_at") @db.Timestamptz(3)
+  /// Solo el código del error (p. ej. ECONNREFUSED), nunca el mensaje completo.
+  lastError     String?    @map("last_error") @db.VarChar(64)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@map("mail_outbox")
 }

@@ -11,7 +11,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <nav>
+          <a href="/">Inicio</a> · <a href="/login">Entrar</a> · <a href="/registro">Crear cuenta</a> ·{' '}
+          <a href="/cuenta">Mi cuenta</a>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }

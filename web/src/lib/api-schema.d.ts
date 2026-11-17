@@ -24,10 +24,208 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pide crear una cuenta (manda un enlace de verificación)
+         * @description Misma respuesta exista o no la cuenta. La cuenta NO se crea aquí: nace al abrir el enlace.
+         *     Tope: 5 por IP cada 15 min.
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Abre el enlace de registro y crea la cuenta (un solo uso) */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inicia sesión; pone las cookies de acceso y de refresh
+         * @description Mismo 401 para cuenta inexistente, contraseña mala, cuenta desactivada o bloqueada.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambia el refresh (de un solo uso) por un par nuevo de cookies
+         * @description Reusar un refresh ya rotado se toma como robo y cierra todas las sesiones de la cuenta.
+         */
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cierra la sesión (el acceso deja de servir al instante) */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Quién soy (exige sesión) */
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pide un enlace para restablecer la contraseña
+         * @description Misma respuesta exista o no la cuenta. Tope 3 por IP cada 15 min.
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Usa el enlace y fija una contraseña nueva; cierra todas las sesiones */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Format: email
+         * @description Se normaliza a minúsculas y sin espacios.
+         */
+        Email: string;
+        /** @description No puede contener la parte local del correo. */
+        NewPassword: string;
+        OpaqueToken: string;
+        RegisterRequest: {
+            email: components["schemas"]["Email"];
+            password: components["schemas"]["NewPassword"];
+        };
+        LoginRequest: {
+            email: components["schemas"]["Email"];
+            password: string;
+        };
+        EmailRequest: {
+            email: components["schemas"]["Email"];
+        };
+        TokenRequest: {
+            token: components["schemas"]["OpaqueToken"];
+        };
+        ResetPasswordRequest: {
+            token: components["schemas"]["OpaqueToken"];
+            password: components["schemas"]["NewPassword"];
+        };
+        Role: {
+            /** @enum {string} */
+            name: "usuario" | "staff" | "manager" | "admin" | "director" | "super";
+            level: number;
+        };
+        PublicUser: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            role: components["schemas"]["Role"];
+        };
+        LoginResponse: {
+            user: components["schemas"]["PublicUser"];
+        };
+        Message: {
+            message: string;
+        };
+        Error: {
+            statusCode: number;
+            message: string | string[];
+            error?: string;
+        };
         /** @enum {string} */
         CheckState: "ok" | "down";
         HealthReport: {
@@ -40,9 +238,48 @@ export interface components {
             };
         };
     };
-    responses: never;
+    responses: {
+        /** @description Aceptado. El resultado real se le cuenta al dueño del correo, por correo. */
+        CheckYourEmail: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Message"];
+            };
+        };
+        /** @description Hecho */
+        Message: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Message"];
+            };
+        };
+        /** @description Error (validación, sin sesión, tope superado…) */
+        Error: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+    };
     parameters: never;
-    requestBodies: never;
+    requestBodies: {
+        Register: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        Token: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+    };
     headers: never;
     pathItems: never;
 }
@@ -82,6 +319,154 @@ export interface operations {
                     "application/json": components["schemas"]["HealthReport"];
                 };
             };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Register"];
+        responses: {
+            202: components["responses"]["CheckYourEmail"];
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Token"];
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada */
+            200: {
+                headers: {
+                    /** @description __Host-atalaya_access y __Secure-atalaya_refresh (httpOnly, Secure, SameSite=Strict) */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cookies renovadas */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión cerrada y cookies borradas */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El usuario de la sesión */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUser"];
+                };
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["CheckYourEmail"];
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
         };
     };
 }

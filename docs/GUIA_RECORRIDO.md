@@ -120,3 +120,121 @@ La llave es un **contrato** entre dos lenguajes y está escrito en `contracts/RE
 - **Contrato (OpenAPI):** el documento que dice qué rutas existen y qué devuelven. Las piezas lo obedecen.
 - **TTL (vigencia):** segundos que vive una llave en Redis antes de borrarse sola.
 - **Fail-closed:** ante la duda, negar.
+
+---
+
+## Capítulo v0.2: registro, verificación, login y sesiones
+
+> Lo nuevo: cuentas reales, correo de verificación, sesiones que se renuevan solas y cierre de sesión que corta al instante. Los ataques y sus defensas, ficha por ficha, están en [`laboratorio/v0.2-acceso.md`](laboratorio/v0.2-acceso.md).
+
+### 1. Levantar y preparar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # crea las tablas (la primera vez)
+docker compose exec api npx prisma db seed          # 6 cuentas de prueba: <rol>@example.com / TestOnly123!
+```
+
+Los correos no salen a internet: los atrapa **Mailpit**, en <http://localhost:3071>.
+
+### 2. Las tablas (`api/prisma/schema.prisma` y su migración)
+
+| Tabla | Para qué |
+|---|---|
+| `roles` | Los 6 niveles (0 = usuario … 5 = super). Filas **fijas**, sembradas por la migración. |
+| `users` | Una persona, una cuenta. Solo existe con el correo ya verificado. |
+| `sessions` | Un inicio de sesión en un dispositivo. Se revisa en **cada** petición. |
+| `refresh_tokens` | La cadena de refresh de una sesión. Cada uno sirve **una** vez. |
+| `email_tokens` | Enlaces de correo de un solo uso (registro o restablecer), con su propósito. |
+| `mail_outbox` | Bandeja de salida: los correos esperan aquí y un despachador los manda. |
+
+La migración (`prisma/migrations/…_auth/migration.sql`) termina con **SQL escrito a mano**: los roles fijos y los `CHECK` que hacen que la base rechace datos imposibles aunque el código fallara. Uno de ellos enseña una trampa de verdad: `NULL IN (...)` da NULL, **y un CHECK que da NULL pasa**. Por eso el `IS NOT NULL` explícito.
+
+### 3. Los dos tokens
+
+| | Acceso | Refresh |
+|---|---|---|
+| Qué es | JWT firmado (HS256) | 43 caracteres al azar (opaco) |
+| Dura | 10 minutos | Hasta que se use (una vez); la sesión, 7 días |
+| Viaja | En cada petición a `/api` | Solo a `/api/auth` |
+| Cookie | `__Host-atalaya_access` | `__Secure-atalaya_refresh` |
+| En la base | Nada (solo su sesión) | Su SHA-256 |
+
+¿Por qué dos? El de acceso viaja mucho, así que dura poco. El de refresh casi no viaja, y gracias a él la persona no escribe su contraseña cada 10 minutos.
+
+### 4. Recorrido: registrarse
+
+```bash
+curl -s -X POST localhost:3070/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"yo@example.com","password":"una frase larga de prueba"}'
+```
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `main.ts` | El byte nulo se rechaza; el DTO valida y **normaliza** el correo (minúsculas, sin espacios). |
+| 2 | `app.module.ts` | Guardas: tope (5 cada 15 min por IP) → origen (CSRF) → sesión (la ruta es `@Public()`). |
+| 3 | `auth/auth.controller.ts` | Llama al servicio y responde **siempre** el mismo 202. |
+| 4 | `auth/registration.service.ts` | Calcula Argon2 **siempre**. Si la cuenta existe, encola «ya tienes cuenta»; si no, guarda un `email_tokens` (con el hash de la contraseña) y encola «confirma tu correo». |
+| 5 | `mail/mail.service.ts` | `enqueue` solo escribe en `mail_outbox`. Cada 5 s el despachador reclama un lote (`FOR UPDATE SKIP LOCKED`), lo manda por SMTP y vacía el cuerpo. |
+| 6 | Mailpit | El correo llega con `http://localhost:3070/verificar?token=…`. |
+
+### 5. Recorrido: confirmar el correo
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/app/verificar/page.tsx` | Lee el token **una vez** (`use-url-token.ts`), lo borra de la URL y hace `POST /api/auth/verify-email`. |
+| 2 | `registration.service.ts` → `verify` | En una transacción: **reclama** el enlace con un `updateMany … where usedAt: null`. Si dos clics llegan a la vez, solo uno gana. Crea el usuario (rol `usuario`, verificado) e invalida los demás enlaces de ese correo. |
+
+### 6. Recorrido: entrar y moverse con sesión
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `auth/auth.service.ts` | ¿Cuenta bloqueada por intentos? (Redis, **antes** de la base). Busca la cuenta y verifica la contraseña (contra un hash de relleno si no existe). |
+| 2 | `auth/sessions.service.ts` → `start` | Crea la sesión y su primer refresh; firma el acceso con `sub` (usuario) y `sid` (sesión). |
+| 3 | `auth/cookies.ts` | Pone las dos cookies: httpOnly, Secure, SameSite=Strict. |
+| 4 | `auth/auth.guard.ts` | En **cada** petición protegida: verifica la firma y busca en la base que la sesión siga abierta y la cuenta activa. Deja al usuario en `req.user`. |
+| 5 | `GET /api/auth/me` | Devuelve `{ id, email, role }`. Nunca el hash. |
+
+### 7. Recorrido: el acceso vence (minuto 10)
+
+| Paso | Archivo | Qué pasa |
+|---|---|---|
+| 1 | `web/src/lib/browser-api.ts` | Una llamada recibe 401. El cliente pide **una** renovación (compartida si hay varias llamadas a la vez) y repite la llamada. |
+| 2 | `sessions.service.ts` → `rotate` | Busca el refresh por su hash. Si ya se había usado: ¿carrera o robo? (ver `handleReuse`). Si no, lo marca usado de forma **atómica** y emite un par nuevo. |
+
+### 8. Recorrido: salir y restablecer
+
+- **Logout** (`POST /api/auth/logout`): revoca la sesión. La cookie copiada deja de servir **al instante**, porque el guard revisa la sesión.
+- **Restablecer** (`/olvide` → correo → `/restablecer`): misma respuesta exista o no la cuenta. Al usar el enlace se cambia la contraseña y se revocan **todas** las sesiones, en una sola transacción.
+
+### 9. Experimentos
+
+| # | Haz esto | Qué deberías ver | Qué enseña |
+|---|---|---|---|
+| 1 | Regístrate en <http://localhost:3070/registro> y abre Mailpit | El correo con el enlace | La bandeja de salida y el despachador |
+| 2 | `docker compose exec db psql -U atalaya -c 'select email, used_at from email_tokens'` antes y después de abrir el enlace | `used_at` se llena | Un solo uso |
+| 3 | `docker compose exec db psql -U atalaya -c 'select length(text) from mail_outbox'` | `0` en los enviados | El cuerpo con el token no se guarda |
+| 4 | Entra, copia tus cookies desde las herramientas del navegador, cierra sesión y repite `curl -b 'cookie…' localhost:3070/api/auth/me` | `401` | El guard revisa la sesión |
+| 5 | En las herramientas del navegador, borra solo `__Host-atalaya_access` y recarga `/cuenta` | Sigues dentro | La renovación automática |
+| 6 | En `auth.guard.ts` quita la línea `revokedAt: null`, reinicia la API (`docker compose restart api`) y corre `npm run test:e2e` | 3 pruebas fallan | Una prueba vale si sabe fallar |
+
+### 10. Pruebas de esta fase
+
+```bash
+cd api && npm test              # unitarias (sin Docker)
+cd api && npm run test:e2e      # ataques contra el sistema vivo
+cd web && npm run test:browser  # el recorrido completo en Chrome real
+./scripts/smoke.sh              # 23 comprobaciones del sistema
+```
+
+Las rutas de acceso tienen topes por IP: la suite e2e cabe **una vez cada 15 minutos**. Para repetirla antes: `docker compose restart api` (los topes viven en la memoria del proceso).
+
+### 11. Glosario de esta fase
+
+- **JWT:** un texto firmado que dice «soy el usuario X, sesión Y, hasta tal hora». Cualquiera lo lee; solo la API lo puede firmar.
+- **Token opaco:** texto al azar sin datos dentro; solo sirve para buscarlo en la base.
+- **Rotación:** cambiar el refresh en cada uso; el viejo queda marcado como usado.
+- **Enumeración:** averiguar qué cuentas existen por diferencias en las respuestas.
+- **CSRF:** que otro sitio use tus cookies sin que lo sepas.
+- **Bandeja de salida (outbox):** tabla donde los correos esperan a que un proceso aparte los mande.
+- **Argon2id:** la función que convierte una contraseña en un hash costoso de adivinar.

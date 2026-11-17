@@ -26,3 +26,16 @@
 - **vitest 4.1** (la misma que ya funciona en dvlopr-bn), no la 5.
 - Lint con `oxlint --deny-warnings`: sin esa opción, las advertencias no fallan.
 - Fuera de alcance, a propósito: organizaciones (varias personas por negocio).
+
+## 2026-11-17 — v0.2 (diseño de Claude, dentro de lo aprobado)
+- **Registrarse no crea al usuario:** crea un enlace pendiente con el hash de la contraseña; el usuario nace al verificar. Evita el pre-secuestro y las cuentas basura.
+- **Restablecer la contraseña entra en v0.2** (comparte la maquinaria de enlaces por correo). No estaba asignado a ninguna fase.
+- **Dos cookies:** acceso `__Host-` (JWT de 10 min) y refresh `__Secure-` con `Path=/api/auth` (opaco, de un solo uso, rotado; sesión de 7 días). `Secure` también en local: navegadores y curl tratan localhost como seguro.
+- **La sesión se revisa en la base en cada petición.** Logout, restablecimiento y robo detectado cortan el acceso al instante. Hace innecesaria una lista negra de `jti` en Redis.
+- **Robo de refresh:** reuso de uno rotado = se revocan todas las sesiones, salvo una carrera con evidencia (rotado hace menos de 10 s y su sucesor **directo** sin usar).
+- **Correos por bandeja de salida** (`mail_outbox`) con despachador cada 5 s; el cuerpo se borra al enviarse. Un solo `SMTP_URL` para Mailpit y para Resend (SMTP).
+- **Topes:** por IP y ruta (Nest), por cuenta para el login (10 fallos en 15 min, Redis) y por destinatario **y propósito** para correos (1 por minuto), más 200 correos por hora en total.
+- **CSRF:** `SameSite=Strict` + guarda de `Sec-Fetch-Site`/`Origin` en toda petición que cambia algo.
+- **Contraseñas:** Argon2id (19 MiB, t=2, p=1), de 12 a 128 caracteres y sin la parte local del correo; sin reglas de composición (NIST 800-63B).
+- **Pruebas por capas:** unitarias (vitest), ataques contra la API viva con Mailpit (vitest e2e) y el recorrido en Chrome real (Playwright con `channel: 'chrome'`, sin descargar navegadores). Cada suite se validó con una falla plantada.
+- En CI la migración y la semilla son pasos explícitos (`prisma migrate deploy`, `db seed`); la API no migra sola al arrancar (lección 146).
