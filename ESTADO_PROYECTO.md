@@ -9,28 +9,32 @@
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-18
 
-**Fase actual:** `v0.8` **construida, verificada, comiteada y subida** en la rama `fase/v0.8-subida` (3 commits, apilada sobre `fase/v0.7-bitacora`). Falta: fusionar el PR de v0.7, abrir el de v0.8, el CI de GitHub y la etiqueta. Siguiente fase: `v0.9` (lector de ventas, mapeo de columnas, limpieza e informe de calidad).
+**Fase actual:** `v0.9` **construida, verificada, comiteada y subida** en `fase/v0.9-analisis`. Las ramas están **apiladas** y ninguna ha pasado por GitHub: `main` (v0.6) ← `fase/v0.7-bitacora` ← `fase/v0.8-subida` ← `fase/v0.9-analisis` (9 commits por delante de `main`). Falta, en orden: fusionar v0.7, luego v0.8, luego v0.9 (cada PR con su CI y su etiqueta). Siguiente fase: `v0.10` (indicadores, Pareto, anomalías y pronóstico; dinero en `Decimal` y zona horaria).
 
-**Qué hay en v0.8 (verificado el 2026-11-18):**
-- **Contrato** `/uploads` (POST 202, GET, GET/DELETE por id) y `/admin/uploads` (solo metadatos). Tabla `uploads` (migración `20261118204408_uploads`) con CHECK: tipo, estado, motivo de rechazo de lista cerrada, tamaño, hex, «motivo sii rechazado» y «fecha de revisión sii terminó».
-- **API** (`api/src/uploads/`): tipo por **firma de bytes** (no por extensión), sin `.xlsm` ni macros, 5 MB cortado mientras llega, un solo campo, tope de 10 archivos por cuenta con candado, 404 (no 403) en archivos ajenos, bytes en un volumen con nombre generado por el servidor, cola en el Redis Stream `atalaya:uploads` (solo el id).
-- **Worker** (`worker/atalaya_worker/`): revisión profunda (bomba zip contando bytes reales, entradas, zip slip, rango gigante, XXE con `defusedxml`, CSV), SHA-256 y tamaño contra lo guardado, `O_NOFOLLOW`, 20 s por archivo; un archivo que ya mató al worker no se reabre (`worker_timeout`).
-- **S-1 (worker) cerrado:** rol de base `atalaya_worker` con permisos por columna (migración `20261118220000_uploads_worker_role`, sin LOGIN; el servicio `db-roles` le pone la contraseña) y usuario de Redis `worker` con ACL. Las dos contraseñas están en el `.env` del dueño (`WORKER_REDIS_PASSWORD`, `WORKER_DB_PASSWORD`).
-- **Pantallas** `/archivos` (subir, estado con sondeo con retroceso, motivos en español, borrar) y `/admin/archivos` (metadatos; el admin no ve el nombre).
-- **Pruebas:** API unitarias 205 · ataques e2e 98 (19 de subida + 11 de archivos hostiles) · Chrome 20 (6 nuevas) · worker 37 · `scripts/permisos-worker.sh` 25 comprobaciones (4 permisos, 21 rechazos) · smoke en orden. Fallas plantadas: sin el candado cae la prueba de carrera (11 en vez de 10); con un permiso de más sobre `users` cae el script de permisos.
-- Laboratorio de 19 fichas (`docs/laboratorio/v0.8-subida.md`) y capítulo v0.8 de la guía.
-- **Cambio fuera de la subida:** `/auth/me` usa `scaled(60)` (60 en producción, 300 en desarrollo y CI): la suite de Chrome agotaba el tope.
+**⚠ Una discrepancia sin resolver:** el dueño dijo (2026-11-18) haber fusionado v0.7, pero **GitHub no lo muestra**: `main` sigue en el merge de v0.6 (`abe5bcc`) y no existe la etiqueta `v0.7`. Hay que mirar si el PR quedó fusionado o solo aprobado, o si se fusionó en otra rama.
 
-**Siguiente paso:** fusionar el PR de v0.7 (si no está ya) y abrir el PR de v0.8 hacia `main` (no hay `gh`: desde la web); mirar el CI, que **es la primera vez que corre** con las dos contraseñas del worker, el volumen de subidas compartido y el script de permisos. Luego etiqueta `v0.8` y `v0.9` (contrato primero).
+**Qué hay en v0.8 (subida segura):** `POST/GET /uploads` con el tipo por **firma de bytes**, sin `.xlsm` ni macros, 5 MB cortado mientras llega, tope de 10 por cuenta con candado, 404 en lo ajeno; cola en Redis Stream (solo el id); worker con **revisión profunda** (bomba zip, entradas, zip slip, rango gigante, XXE con `defusedxml`, SHA-256, `O_NOFOLLOW`) y rol de base y usuario de Redis **mínimos** (S-1 del worker cerrado); pantallas `/archivos` y `/admin/archivos` (solo metadatos).
 
-**Bloqueos:** ninguno. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
-**Pendientes nuevos de esta fase:** S-15 (un 429 o 5xx de `/me` manda a `/login`; debe redirigir solo ante 401) y el CSV en latin1, que hoy se rechaza (se revisa en v0.9).
-**Ojo al probar:** las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas de e2e o de Chrome hay que reiniciar la API (`docker compose restart api`), y `smoke.sh` se corre una vez por minuto (él mismo agota el cupo de la IP). Todo `docker compose` necesita las dos variables del worker en `.env`.
+**Qué hay en v0.9 (análisis de ventas):**
+- **Dos pasos:** crear → el worker deja una **vista previa** (columnas, ejemplos, mapeo sugerido) → la persona confirma las columnas → el worker limpia y deja el informe. Tabla `analyses` con CHECK (estados y motivos cerrados, motivo sii falló, informe sii terminó, etapas, JSON objeto) y permisos por columna para el worker.
+- **Limpieza** (`worker/atalaya_worker/cleaner.py`): reglas cerradas, nada se descarta sin contarse, una razón por fila y `rowsKept + rowsDropped == rowsRead`; fechas e importes decididos por **toda la columna**, avisando lo ambiguo; dinero en `Decimal`; duplicado = fila idéntica en todo lo mapeado.
+- **Exportación** a dos CSV con **un solo sanitizador** anti inyección de fórmulas (`export.safe_cell`), solo sobre el texto; la API solo entrega.
+- **Worker:** `openpyxl` en solo lectura y solo valores; latido en un hilo aparte; una etapa que ya mató al worker no se reabre (marca `SET NX` en Redis).
+- **Pantallas:** `/analisis` y `/analisis/[id]` (formulario de mapeo completo, informe de calidad, descargas) y botón Analizar en «Mis archivos».
+- **Pruebas (todas verdes el 2026-11-18):** API unitarias 236 · ataques e2e 109 (11 de análisis con el worker **real**) · Chrome 27 · worker 171 · `scripts/permisos-worker.sh` 38 · smoke en orden. Fallas plantadas detectadas: sin el candado de subidas (11 en vez de 10), un permiso de más al rol del worker (dos veces) y el sanitizador desactivado (6 celdas peligrosas).
+- Laboratorios de 19 (v0.8) y 33 (v0.9) fichas, con lo que **no** está cubierto, y capítulos v0.8 y v0.9 de la guía.
+
+**Siguiente paso:** resolver lo de v0.7 en GitHub; abrir los PR en cadena (no hay `gh`: desde la web) y mirar el CI, que **es la primera vez que corre** con: las dos contraseñas del worker (`WORKER_REDIS_PASSWORD`, `WORKER_DB_PASSWORD`), el volumen de subidas y el de resultados, `permisos-worker.sh`, `openpyxl` en la imagen del worker y `THROTTLE_SCALE` 10. Luego las etiquetas `v0.7`, `v0.8` y `v0.9`, y `v0.10` (contrato primero).
+
+**Bloqueos:** ninguno técnico. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
+**Pendientes nuevos de v0.8 y v0.9** (detalle en `PENDIENTES.md`): S-15 (un 429 o 5xx de `/me` manda a `/login`; debe redirigir solo ante 401); CSV en **latin1** (se rechaza; **no** se resolvió en v0.9, sin fase asignada); de un `.xlsx` solo se lee la primera hoja; la contraseña de Redis sigue en los argumentos (S-1, v1.0).
+**Ojo al probar:** las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas de e2e o de Chrome hay que reiniciar la API (`docker compose restart api`), y `smoke.sh` se corre una vez por minuto (él mismo agota el cupo de la IP). Todo `docker compose` necesita en `.env` `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD` (ya están en el `.env` del dueño).
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-18 | v0.9 construida, verificada, comiteada (3 commits) y subida (`fase/v0.9-analisis`): análisis de ventas en dos pasos, worker con `openpyxl`, limpieza con reglas cerradas y `Decimal`, exportación con sanitizador anti fórmulas, pantallas, laboratorio de 33 fichas y capítulo v0.9. Sin PR ni CI. Pendiente sin resolver: v0.7 no aparece fusionada en GitHub. |
 | 2026-11-18 | v0.8 construida, verificada, comiteada y subida (`fase/v0.8-subida`): subida segura, cola, worker con rol de base y usuario de Redis mínimos, pantallas de archivos, laboratorio de 19 fichas, capítulo v0.8 y `permisos-worker.sh`. Anotado S-15. Sin PR ni CI todavía. |
 | 2026-11-18 | v0.7 construida, verificada y comiteada en su rama: bitácora de seguridad y auditoría, aviso de robo de sesión, recolector CSP y panel «Seguridad del sistema»; laboratorio de 12 fichas y capítulo v0.7. |
 | 2026-11-17 | PR #6 fusionado con el CI 5/5; etiqueta `v0.6` en `abe5bcc`. v0.6 cerrada. |
