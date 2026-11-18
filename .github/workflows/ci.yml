@@ -94,6 +94,8 @@ jobs:
           docker compose exec -T api npx prisma migrate deploy
           docker compose exec -T api npx prisma db seed
       - run: ./scripts/smoke.sh
+      - name: El worker solo puede lo que debe (Postgres y Redis)
+        run: ./scripts/permisos-worker.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 24 }
       - name: Pruebas de seguridad contra el sistema vivo (API)

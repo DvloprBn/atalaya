@@ -29,8 +29,9 @@
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
 ## Siguiente fase (v0.8) — avance 2026-11-18
-- ✅ Contrato, tabla `uploads` y módulo de subida en la API (19 pruebas e2e de ataque, 14 unitarias nuevas). Sin commit.
-- ✅ Pantalla de archivos (`/archivos` y `/admin/archivos`): 5 pruebas nuevas en Chrome real (suite completa: 20).
+- ✅ Contrato, tabla `uploads` y módulo de subida en la API (19 pruebas e2e de ataque y 20 unitarias nuevas).
+- ✅ Pantalla de archivos (`/archivos` y `/admin/archivos`): 6 pruebas nuevas en Chrome real (suite completa: 20).
 - ✅ Worker (revisión profunda, rol de base y usuario de Redis mínimos): 37 pruebas de Python y 11 e2e de archivos hostiles; recuperación de un worker caído probada en vivo.
-- ⏳ **Falta en v0.8:** laboratorio v0.8 y su capítulo en `GUIA_RECORRIDO.md` (bomba zip, rango gigante, XXE, `.xlsm`, permisos del rol); verificar el CI de GitHub con las dos contraseñas nuevas; commit y PR.
+- ✅ Laboratorio v0.8 (19 fichas) y capítulo v0.8 de la guía; `scripts/permisos-worker.sh` (21 rechazos y 4 permisos reales, con falla plantada) y su paso en el CI.
+- ⏳ **Falta en v0.8:** verificar el CI de GitHub con las dos contraseñas nuevas y el script de permisos; PR, CI y etiqueta (después de fusionar v0.7).
 - Idea para el panel: avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo).

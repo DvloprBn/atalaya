@@ -2,7 +2,7 @@
 
 > Una sola guía, en orden. Cada fase agrega su capítulo al final. Léela con el código abierto al lado: cada paso nombra el archivo exacto.
 >
-> **Capítulo actual: v0.1, el esqueleto.** Todavía no hay usuarios ni análisis; hay algo más importante: las cuatro piezas hablando entre sí, y la seguridad de base que todo lo demás va a heredar.
+> **Capítulo actual: v0.8, la subida de archivos.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
 
 ---
 
@@ -601,3 +601,70 @@ Cada punto es un día, de los últimos 14. Más lejos del centro = más eventos.
 
 - El **tope de peticiones** sigue en la memoria del proceso (S-6). Con una instancia basta; con varias habría que pasarlo a Redis. Se decide en v1.0, cuando se sabe cuántas instancias habrá.
 - La CSP sigue en **solo reporte**: ahora hay quien lea los reportes (S-2). Se pasa a bloqueo en v1.0, después de observar un tiempo.
+
+---
+
+## Capítulo v0.8: subir archivos sin confiar en nadie
+
+> Lo nuevo: la subida de CSV y `.xlsx`, una cola en Redis, un **worker** que los revisa por dentro, y las pantallas **Mis archivos** y **Archivos de las cuentas**. Ataques y defensas en [`laboratorio/v0.8-subida.md`](laboratorio/v0.8-subida.md).
+
+### 1. Preparar y probar
+
+```bash
+# Dos contraseñas nuevas en tu .env (el worker tiene su propio usuario de Redis y su propio rol de base):
+printf 'WORKER_REDIS_PASSWORD=%s\nWORKER_DB_PASSWORD=%s\n' $(openssl rand -hex 24) $(openssl rand -hex 24) >> .env
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # tabla uploads y el rol atalaya_worker (sin poder entrar todavía)
+docker compose up -d                                # el servicio db-roles le pone contraseña al rol y termina
+./scripts/permisos-worker.sh                        # comprueba que el worker solo puede lo que debe
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`) → **Mis archivos**. Sube un CSV: pasa de «en cola» a «aceptado» solo. Sube uno con solo el encabezado: queda «rechazado» con su motivo.
+
+### 2. Un archivo es entrada hostil que otra pieza va a abrir
+
+Toda la fase sale de una frase: **el archivo lo escribe un desconocido y lo va a abrir un programa que no controlamos.** De ahí tres decisiones:
+
+| Decisión | Qué evita |
+|---|---|
+| **Dos revisiones**: la API mira lo barato (firma, tamaño, forma) *antes de guardar*; el worker mira por dentro, aislado | Que el programa que atiende a todos abra archivos peligrosos |
+| **El tipo sale de los bytes**, no de la extensión ni del `Content-Type` (los dos los escribe quien sube) | Un `.xlsx` que es otra cosa; un `.csv` que es un ejecutable |
+| **El worker puede caer**: por eso solo toca el *estado* de los archivos | Que un archivo que explote al lector llegue a las cuentas, la bitácora o los demás archivos |
+
+### 3. El camino de un archivo
+
+1. **Navegador** (`web/src/app/archivos/upload-form.tsx`): una revisión *de cortesía* (extensión, 0 bytes, 5 MB). Ahorra una subida inútil; **no protege nada**.
+2. **API** (`api/src/uploads/`): `file-signature.ts` decide por bytes. Si pasa, guarda los bytes con un nombre **generado por el servidor** (`upload-storage.ts`), anota la fila (`uploads`, con el tope de 10 por cuenta bajo un candado) y encola **solo el id** en el Redis Stream `atalaya:uploads`. Responde **202**: la revisión profunda es asíncrona.
+3. **Worker** (`worker/atalaya_worker/`): toma el mensaje (`jobs.py`), pasa el archivo a «checking» en **una sola sentencia** (`store.py`), lo lee con cuidado y lo revisa (`review.py` → `inspect_xlsx.py` / `inspect_csv.py`). Deja `accepted` o `rejected` con un motivo de **lista cerrada**.
+4. **Pantalla**: se vuelve a leer sola, con pausas cada vez más largas, hasta que nada esté pendiente.
+
+### 4. Qué mira cada una
+
+| | API (antes de guardar) | Worker (ya encolado) |
+|---|---|---|
+| Tipo | Firma de bytes y extensión coherentes; sin `.xlsm` ni `vbaProject.bin` | Lo repite; además SHA-256 y tamaño contra lo guardado |
+| Tamaño | 5 MB, cortado mientras llega | 50 MB descomprimido y razón 100:1, contando bytes **reales** |
+| Forma | Un solo campo `file` | Entradas del zip, rutas, nombres repetidos; XML sin DTD (`defusedxml`); filas y columnas (50 000 × 200) |
+| Cuenta | 10 archivos, con candado | — |
+
+### 5. El radio de la explosión (S-1)
+
+El worker se conecta con **credenciales propias**:
+
+- **Postgres:** el rol `atalaya_worker` (migración `uploads_worker_role`) lee 7 columnas de `uploads` y actualiza 3. No ve cuentas, sesiones ni la bitácora. La migración lo crea **sin poder entrar** y sin contraseña (un secreto no vive en una migración); el servicio `db-roles` del compose le pone la contraseña de tu `.env`.
+- **Redis:** el usuario `worker` solo puede crear su grupo, leer y confirmar su cola y escribir su latido.
+- **Disco:** el volumen de archivos lo monta en **solo lectura**.
+
+`scripts/permisos-worker.sh` lo comprueba con las credenciales reales: 13 cosas de Postgres y 8 de Redis que deben fallar, y 4 que deben funcionar. Si alguien le da un permiso de más, el script cae.
+
+### 6. Un worker que muere a mitad
+
+El mensaje de la cola solo se confirma al terminar. Si el worker muere, el mensaje queda **pendiente** y al volver se ve otra vez. Ahí está la trampa: si el archivo fue *justo* lo que lo mató, reabrirlo lo mata otra vez, en bucle. Por eso `claim` dice si el archivo **ya estaba** en «checking»; en ese caso no se revisa, se cierra como `worker_timeout`. *Un archivo que ya mató al worker una vez no se reabre.*
+
+### 7. Lo que sigue pendiente (y por qué)
+
+- La contraseña de Redis sigue en los argumentos de `redis-server` (S-1): el archivo ACL y los secretos de Docker llegan en v1.0.
+- Un CSV en latin1 (típico de Excel en español) se rechaza; se revisa en v0.9.
+- S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
+- Los archivos huérfanos (la API cae entre guardar y anotar) los barre la poda de v1.0.
+- El **análisis** de lo subido (lector de ventas, mapeo de columnas, informe de calidad) empieza en v0.9: hoy un archivo «aceptado» solo significa *«no es peligroso»*, no *«es útil»*.
