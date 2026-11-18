@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.6.0
+  version: 0.7.0
   license:
     name: MIT
     identifier: MIT
@@ -379,6 +379,73 @@ paths:
         "200": { $ref: "#/components/responses/AdminUser" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /admin/security/events:
+    get:
+      operationId: adminSecurityEvents
+      summary: Bitácora de seguridad (lo más reciente primero, 20 por página)
+      description: >
+        Exige nivel admin (3). Del origen solo se muestra un prefijo del hash de la IP (para ver que
+        dos eventos vienen del mismo lugar sin revelarla). El correo de una cuenta solo aparece si
+        está por debajo de quien consulta (o es la suya); si no, `user` es null (OWASP API1).
+      parameters:
+        - { name: type, in: query, required: false, schema: { $ref: "#/components/schemas/SecurityEventType" } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de eventos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityEventPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/security/summary:
+    get:
+      operationId: adminSecuritySummary
+      summary: Eventos por día de los últimos 14 días (alimenta el radar del panel)
+      responses:
+        "200":
+          description: Un renglón por día, también los días sin eventos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecuritySummary" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/audit:
+    get:
+      operationId: adminAudit
+      summary: Registro de auditoría (quién hizo qué sobre qué cuenta; 20 por página)
+      description: Mismas reglas de visibilidad de correos que la bitácora.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de entradas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /csp-report:
+    post:
+      operationId: cspReport
+      summary: Recolector de reportes de la política de contenido (CSP)
+      description: >
+        Público a propósito (lo llama el navegador, sin sesión). Responde 204 sea o no un reporte válido
+        (no se le dice nada a quien lo manda); solo un cuerpo que no es JSON de objeto o arreglo da 400, y uno de más
+        de 16 KB, 413. Topado por IP, con un reporte repetido por
+        minuto descartado, y se guarda solo la directiva y el HOST bloqueado (nunca rutas ni parámetros).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/csp-report:
+            schema: { type: object }
+          application/reports+json:
+            schema: { type: array, items: { type: object } }
+      responses:
+        "204": { description: Recibido }
 components:
   parameters:
     UserId:
@@ -603,6 +670,79 @@ components:
       required: [items, page, pageSize, total]
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    SecurityEventType:
+      type: string
+      enum: [login_failed, login_locked, two_factor_failed, refresh_reuse, google_rejected, rate_limited, csp_violation]
+    AccountRef:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string }
+    SecurityEvent:
+      type: object
+      additionalProperties: false
+      required: [id, type, createdAt, source, detail, user]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/SecurityEventType" }
+        createdAt: { type: string, format: date-time }
+        source: { type: [string, "null"], description: "Primeros 8 caracteres del hash de la IP" }
+        detail: { type: [string, "null"], description: Un código corto (p. ej. bad_password), nunca datos de la persona }
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+    SecurityEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SecurityEvent" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    SecuritySummary:
+      type: object
+      additionalProperties: false
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, total, byType]
+            properties:
+              date: { type: string, format: date }
+              total: { type: integer }
+              byType: { type: object, additionalProperties: { type: integer } }
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      required: [id, action, createdAt, detail, actor, target]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string }
+        createdAt: { type: string, format: date-time }
+        detail: { type: [string, "null"] }
+        actor:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+        target:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+    AuditPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }

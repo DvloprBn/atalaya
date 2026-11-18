@@ -551,3 +551,53 @@ No hay que cambiar código: el compose usa lo que pongas en `.env` y, si no pone
 - **`sub`:** el identificador estable de la persona en Google. El correo puede cambiar; el `sub`, no.
 - **Login CSRF:** hacer que la víctima termine el login de otra persona.
 - **Defensa en capas:** que dos barreras distintas rechacen el mismo ataque.
+
+## Capítulo v0.7: la bitácora de seguridad
+
+> Lo nuevo: dos tablas (`security_events` y `audit_logs`), el aviso por correo cuando te roban una sesión, el recolector de reportes CSP y el panel **Seguridad del sistema** para el admin. Ataques y defensas en [`laboratorio/v0.7-bitacora.md`](laboratorio/v0.7-bitacora.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy     # tablas security_events y audit_logs
+```
+
+Entra como `admin@example.com` (`TestOnly123!`) y abre **Seguridad del sistema**. Para ver algo: falla un login a propósito, o mira la auditoría tras invitar a alguien.
+
+### 2. Dos registros, dos preguntas
+
+| | `security_events` | `audit_logs` |
+|---|---|---|
+| Responde | ¿Qué **intentaron** contra el sistema? | ¿Quién **hizo** qué (legítimamente)? |
+| Quién escribe | El propio sistema, ante hechos hostiles o raros | Una persona con sesión, al actuar |
+| Ejemplos | login fallido, cuenta bloqueada, refresh reusado, tope superado, CSP | rol cambiado, cuenta desactivada, 2FA activado |
+| Se escribe | Aparte; **si falla, se ignora** (nunca rompe la petición) | **Dentro de la transacción** de la acción; si falla, la acción tampoco ocurre |
+
+La diferencia del último renglón es la lección: una bitácora de ataques es *mejor esfuerzo* (que caiga no debe dejar a nadie sin entrar); una auditoría es *evidencia* (sin ella, la acción no cuenta).
+
+### 3. Qué NO se guarda, a propósito
+
+Ni contraseñas, ni correos de cuentas inexistentes, ni tokens, ni URLs completas. Del origen, solo un **HMAC** de la IP (con llave del servidor: una IP son 32 bits y un hash simple se invierte probándolas todas). El `detail` es un código corto como `bad_password` o `img-src host.example`. Si un dato no hace falta para entender el hecho, no se guarda: lo que no existe no se filtra.
+
+### 4. Recorrido
+
+| Archivo | Qué hace |
+|---|---|
+| `api/src/security/security-log.service.ts` | `record()` (tolerante a fallos, con dedupe) y la poda de 90 días |
+| `api/src/security/ip-hash.ts` | HMAC de la IP y recorte de texto |
+| `api/src/security/audit.ts` | `writeAudit(tx, …)`: la auditoría dentro de la transacción |
+| `api/src/security/logging-throttler.guard.ts` | El tope de siempre, más un renglón `rate_limited` con la **ruta registrada** |
+| `api/src/security/csp-report.ts` + `csp.controller.ts` | El recolector: dos formatos de reporte, solo directiva y host, siempre 204 |
+| `api/src/security/security-read.service.ts` | Lo que lee el panel, con la jerarquía aplicada (OWASP API1) |
+| `api/src/auth/sessions.service.ts` | Ante un robo: cierra, registra y **avisa por correo** |
+| `web/src/app/admin/seguridad/*` | Radar de 14 días + tabla equivalente, bitácora con filtro, auditoría |
+
+### 5. El radar
+
+Cada punto es un día, de los últimos 14. Más lejos del centro = más eventos. **Ámbar = día de ataque**: 10 o más eventos, o cualquier sesión robada (eso nunca es ruido). La tabla de al lado dice lo mismo con palabras: el radar solo no lo lee un lector de pantalla. Los reportes CSP **cuentan** como eventos: una página rota por una política mal puesta también hace «ruido».
+
+### 6. Lo que sigue pendiente (y por qué)
+
+- El **tope de peticiones** sigue en la memoria del proceso (S-6). Con una instancia basta; con varias habría que pasarlo a Redis. Se decide en v1.0, cuando se sabe cuántas instancias habrá.
+- La CSP sigue en **solo reporte**: ahora hay quien lea los reportes (S-2). Se pasa a bloqueo en v1.0, después de observar un tiempo.

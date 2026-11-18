@@ -8,6 +8,8 @@ const PROD_LIMIT = 5; // @Throttle de /auth/accept-invite
 const TOKEN = 'A'.repeat(43); // con forma válida: llega al servicio y responde 400, no 400 de validación
 
 describe('tope por IP en una ruta de acceso', () => {
+  const startedAt = Date.now();
+
   it('/auth/accept-invite responde 429 tras un tope finito y nunca antes del de producción', async () => {
     const browser = new Browser();
     let firstBlocked = 0;
@@ -18,5 +20,13 @@ describe('tope por IP en una ruta de acceso', () => {
     }
     expect(firstBlocked).toBeGreaterThan(PROD_LIMIT); // nunca bloquea ANTES del valor de producción
     expect(firstBlocked).toBeGreaterThan(0); // y bloquea en algún momento
+  });
+
+  it('v0.7: pasarse del tope queda en la bitácora UNA vez (con la ruta registrada, no la URL) aunque se insista', async () => {
+    const admin = new Browser();
+    await admin.post('/api/auth/login', { email: 'admin@example.com', password: 'TestOnly123!' });
+    const list = (await admin.get('/api/admin/security/events?type=rate_limited')).body.items as { detail: string; createdAt: string }[];
+    // Solo los de ESTA corrida (los de corridas anteriores siguen en la bitácora, como debe ser).
+    expect(list.filter((e) => e.detail === 'POST /api/auth/accept-invite' && Date.parse(e.createdAt) >= startedAt)).toHaveLength(1);
   });
 });

@@ -55,8 +55,8 @@ export class AuthController {
   @Throttle({ default: { limit: scaled(20), ttl: MIN } })
   @Post('login')
   @HttpCode(200)
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.auth.login(dto.email, dto.password);
+  async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.auth.login(dto.email, dto.password, req.ip);
     if (!result) throw new UnauthorizedException('Correo o contraseña incorrectos');
     if ('challenge' in result) return { twoFactorRequired: true, challenge: result.challenge }; // sin cookies
     setSessionCookies(res, result.tokens);
@@ -69,7 +69,7 @@ export class AuthController {
   @HttpCode(204)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
     const refresh: unknown = req.cookies?.[REFRESH_COOKIE];
-    const tokens = typeof refresh === 'string' ? await this.sessions.rotate(refresh) : null;
+    const tokens = typeof refresh === 'string' ? await this.sessions.rotate(refresh, req.ip) : null;
     if (!tokens) {
       clearSessionCookies(res);
       throw new UnauthorizedException();

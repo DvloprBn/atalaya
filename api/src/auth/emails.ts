@@ -80,3 +80,18 @@ export function noAccountForReset(registerUrl: string): EmailContent {
     action: { label: 'Crear una cuenta', url: registerUrl },
   };
 }
+
+/** Se detectó el robo de un refresh token y se cerraron TODAS las sesiones de la cuenta (S-7). */
+export function sessionsClosed(forgotUrl: string): EmailContent {
+  return {
+    subject: 'Cerramos tus sesiones de Atalaya por seguridad',
+    title: 'Cerramos tus sesiones',
+    paragraphs: [
+      'Detectamos que alguien intentó usar una sesión tuya que ya estaba cerrada. Es la señal de que una copia de tu sesión pudo caer en otras manos.',
+      'Por seguridad cerramos todas tus sesiones abiertas. Para volver a entrar necesitas tu contraseña.',
+      'Si usas la misma contraseña en otros sitios, o si usas un equipo compartido, cámbiala ahora: eso vuelve a cerrar todo.',
+      STUDY,
+    ],
+    action: { label: 'Cambiar mi contraseña', url: forgotUrl },
+  };
+}

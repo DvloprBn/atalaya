@@ -2,28 +2,33 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-17**
+Última actualización: **2026-11-18**
 
 ---
 
 ## 1. Dónde estamos
-### ESTADO VIVO (único vigente) — reescrito 2026-11-17
+### ESTADO VIVO (único vigente) — reescrito 2026-11-18
 
-**Fase actual:** `v0.6` **cerrada** (etiqueta `v0.6` = commit de fusión `abe5bcc`, PR #6, CI 5/5). Siguiente: `v0.7` (bitácoras de seguridad y panel) en la rama `fase/v0.7-bitacora`.
+**Fase actual:** `v0.7` **construida, verificada y comiteada** en la rama `fase/v0.7-bitacora` (falta el PR, el CI y la etiqueta). Siguiente: `v0.8` (subida segura, cola y worker con rol mínimo).
 
-**Qué hay hasta v0.6 (verificado el 2026-11-17):**
-- Esqueleto (v0.1), acceso (v0.2), roles y admin de cuentas (v0.3), interfaz «Observatorio» (v0.4), 2FA con TOTP (v0.5) y entrar con Google contra un servidor OAuth falso (v0.6).
-- Pruebas: unitarias 172 · ataques e2e 53 · Chrome 11 · smoke 25 · worker 2. **CI 5/5 en GitHub.**
-- La **parte A (acceso)** está completa salvo la bitácora de seguridad (v0.7). La **parte B (análisis)** no existe todavía (v0.8 en adelante).
+**Qué hay en v0.7 (verificado el 2026-11-18):**
+- `security_events` y `audit_logs` (migración `20261118120000_security_log`), IP como HMAC, tipos cerrados con CHECK, retención de 90 días.
+- Eventos: login fallido/bloqueado, 2FA fallido, refresh reusado (con **correo al dueño**), rechazo de Google, tope superado, violación de CSP. Auditoría dentro de la transacción de cada acción de admin y de 2FA.
+- Recolector `POST /api/csp-report` (público, topado, dedupe, solo directiva + host) y `report-uri` en la CSP (sigue en solo reporte).
+- Panel **Seguridad del sistema** (`/admin/seguridad`): radar de 14 días con tabla equivalente, bitácora filtrable y auditoría; la jerarquía oculta las cuentas de nivel igual o superior.
+- Pruebas: unitarias 185 · ataques e2e 68 · Chrome 14 · smoke 25 (el CI de GitHub aún no corrió esta fase). Falla plantada en la regla de visibilidad: caen las 2 pruebas esperadas.
+- Cerrados S-7 y S-14; S-2 con recolector (bloqueo en v1.0); S-6 y S-8 pasan a v1.0.
 
-**Siguiente paso:** v0.7. Primero el contrato (lectura de la bitácora para el admin). Ver `PENDIENTES.md` → «Siguiente fase».
+**Siguiente paso:** abrir el PR de v0.7 (no hay `gh`: desde la web de GitHub) y esperar el CI. Luego v0.8 (contrato primero). Ver `PENDIENTES.md` → «Siguiente fase».
 
 **Bloqueos:** ninguno. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
+**Ojo al probar:** las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas de e2e hay que reiniciar la API (`docker compose restart api`), y `smoke.sh` se corre una vez por minuto.
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-18 | v0.7 construida, verificada y comiteada en su rama: bitácora de seguridad y auditoría, aviso de robo de sesión, recolector CSP y panel «Seguridad del sistema»; laboratorio de 12 fichas y capítulo v0.7. |
 | 2026-11-17 | PR #6 fusionado con el CI 5/5; etiqueta `v0.6` en `abe5bcc`. v0.6 cerrada. |
 | 2026-11-17 | v0.6 construida y verificada (sin comitear): login con Google (Code + PKCE + state + nonce) contra un servidor OAuth falso, id_token verificado a mano, vinculación por sub, 25 pruebas de ataque; laboratorio de 8 secciones y capítulo v0.6. |
 | 2026-11-17 | PR #5 fusionado con el CI 5/5; etiqueta `v0.5` en `c35012f`. v0.5 cerrada. |

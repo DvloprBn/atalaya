@@ -15,7 +15,7 @@
 		Cross-Origin-Opener-Policy "same-origin"
 		# CSP primero en modo "solo reporte" (lección 48): se observa y luego se bloquea.
 		# 'unsafe-eval' solo existe porque el modo desarrollo de Next lo necesita.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri /api/csp-report"
 		-Server
 		-X-Powered-By
 	}

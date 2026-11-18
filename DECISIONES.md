@@ -82,3 +82,15 @@
 - **Solo el alcance `openid email`:** Atalaya no pide ningún permiso sobre la cuenta de Google.
 - **Defensa en capas, medida:** al quitar la revisión del algoritmo o la de «ya tiene otra cuenta de Google», la suite viva sigue en verde (la firma RS256 fija y la restricción única de la base lo rechazan igual) y las unitarias caen. Se mantienen **ambos** niveles de prueba.
 
+## 2026-11-18 — v0.7 (diseño de Claude, dentro de lo aprobado)
+- **Dos tablas, no una:** `security_events` (lo que intentan contra el sistema; mejor esfuerzo, nunca rompe la petición) y `audit_logs` (quién hizo qué; **dentro de la transacción** de la acción, «sin registro no hay acción»).
+- **IP como HMAC** con llave del servidor (`JWT_SECRET` con etiqueta de dominio `atalaya:ip-hash:v1`), no SHA-256 simple. En el panel solo un prefijo de 8 caracteres: sirve para «mismo origen».
+- **Tipos cerrados** (CHECK en la base + `@IsIn` + enum del contrato): agregar un tipo es una migración nueva a propósito.
+- **Dedupe solo en los ruidosos** (`rate_limited`, `csp_violation`, `login_locked`): una línea por minuto, tipo, origen y detalle. `login_failed` **no** lleva dedupe: ya lo limita el tope por IP, y el conteo de intentos es información que sí interesa.
+- **Jerarquía también en la bitácora:** el correo de una cuenta solo aparece si está por debajo de quien mira o es la suya; si no, `user: null`.
+- **Aviso al dueño ante robo de sesión (S-7):** correo sin ningún token ni enlace con secreto; solo manda a «cambiar mi contraseña». Se envía una vez (tras revocar, el segundo intento ya no llega a ese punto).
+- **CSP:** `report-uri` (sigue en solo reporte; el bloqueo es de v1.0). El recolector guarda **directiva + host**, nunca ruta, parámetros ni fragmento. Un JSON que no es reporte responde 204 igual; lo que no es JSON de objeto/arreglo da 400 y más de 16 KB, 413 (del analizador de cuerpos, no se reescribe).
+- **«Día de ataque»** (radar): ≥ 10 eventos en el día UTC, o cualquier `refresh_reuse`. Un solo criterio en `web/src/lib/security-view.ts`.
+- **S-6 (tope en Redis) sigue abierto** a propósito: con una sola instancia no cambia nada y se decide en v1.0. **S-8 (contraseñas filtradas)** también pasa a v1.0.
+- **Retención de 90 días**, poda al arrancar y cada 6 h.
+

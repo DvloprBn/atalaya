@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { writeAudit } from '../../security/audit.js';
 import type { AuthUser } from '../current-user.decorator.js';
 import { verifyPassword } from '../passwords.js';
 import { RateLimits } from '../rate-limits.js';
@@ -74,6 +75,7 @@ export class TwoFactorService {
       });
       if (confirmed.count !== 1) throw new ConflictException('El 2FA ya estaba activo');
       await this.replaceRecoveryCodes(tx, user.id, codes);
+      await writeAudit(tx, 'two_factor_enabled', user.id, user.id);
       // Cambió la seguridad de la cuenta: todas las DEMÁS sesiones se cierran (la tuya sigue).
       await this.sessions.revokeAllForUser(user.id, 'two_factor_changed', tx, user.sessionId);
     });
@@ -87,6 +89,7 @@ export class TwoFactorService {
     await this.prisma.$transaction(async (tx) => {
       await tx.recoveryCode.deleteMany({ where: { userId: user.id } });
       await tx.twoFactor.deleteMany({ where: { userId: user.id } });
+      await writeAudit(tx, 'two_factor_disabled', user.id, user.id);
       await this.sessions.revokeAllForUser(user.id, 'two_factor_changed', tx, user.sessionId);
     });
   }
@@ -95,7 +98,10 @@ export class TwoFactorService {
   async regenerate(user: AuthUser, password: string, code: string) {
     await this.reauth(user.id, password, code);
     const codes = newRecoveryCodes();
-    await this.prisma.$transaction((tx) => this.replaceRecoveryCodes(tx, user.id, codes));
+    await this.prisma.$transaction(async (tx) => {
+      await this.replaceRecoveryCodes(tx, user.id, codes);
+      await writeAudit(tx, 'recovery_codes_regenerated', user.id, user.id);
+    });
     return { recoveryCodes: codes };
   }
 

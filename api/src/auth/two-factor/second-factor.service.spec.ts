@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { RateLimits } from '../rate-limits.js';
+import type { SecurityLog } from '../../security/security-log.service.js';
 import type { SessionsService } from '../sessions.service.js';
 import type { Challenges } from './challenges.js';
 import { hashRecoveryCode } from './recovery-codes.js';
@@ -26,13 +27,14 @@ function build(opts: { challengeOwner?: string | null; locked?: boolean; wins?: 
     consume: vi.fn().mockResolvedValue(wins),
   };
   const sessions = { start: vi.fn().mockResolvedValue(TOKENS) };
+  const security = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new SecondFactorService(
     prisma as unknown as PrismaService, box, limits as unknown as RateLimits,
-    challenges as unknown as Challenges, sessions as unknown as SessionsService,
+    challenges as unknown as Challenges, sessions as unknown as SessionsService, security as unknown as SecurityLog,
   );
   // Aislamos el reto de la comprobación del código (que se prueba aparte, abajo).
   const checkCode = vi.spyOn(service, 'checkCode').mockResolvedValue(opts.codeOk ?? true);
-  return { service, limits, challenges, sessions, checkCode };
+  return { service, limits, challenges, sessions, checkCode, security };
 }
 
 describe('SecondFactorService.verifyLogin', () => {
@@ -50,8 +52,9 @@ describe('SecondFactorService.verifyLogin', () => {
   });
 
   it('un código malo suma un fallo a la cuenta y al reto, y no abre sesión', async () => {
-    const { service, limits, challenges, sessions } = build({ codeOk: false });
-    expect(await service.verifyLogin('reto', '000000')).toBeNull();
+    const { service, limits, challenges, sessions, security } = build({ codeOk: false });
+    expect(await service.verifyLogin('reto', '000000', '203.0.113.9')).toBeNull();
+    expect(security.record).toHaveBeenCalledWith('two_factor_failed', { userId: 'u1', ip: '203.0.113.9', detail: 'login' });
     expect(limits.recordTwoFactorFailure).toHaveBeenCalledWith('u1');
     expect(challenges.recordFailure).toHaveBeenCalledWith('reto');
     expect(challenges.consume).not.toHaveBeenCalled();
@@ -90,7 +93,7 @@ describe('SecondFactorService.checkCode', () => {
       recoveryCode: { updateMany: vi.fn().mockResolvedValue({ count: rows.updateCount ?? 1 }) },
     };
     const service = new SecondFactorService(
-      prisma as unknown as PrismaService, box, {} as RateLimits, {} as Challenges, {} as SessionsService,
+      prisma as unknown as PrismaService, box, {} as RateLimits, {} as Challenges, {} as SessionsService, {} as SecurityLog,
     );
     return { service, prisma, secret };
   }

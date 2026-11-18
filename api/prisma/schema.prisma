@@ -44,6 +44,9 @@ model User {
   twoFactor       TwoFactor?
   recoveryCodes   RecoveryCode[]
   oauthIdentities OAuthIdentity[]
+  securityEvents  SecurityEvent[]
+  auditAsActor    AuditLog[] @relation("AuditActor")
+  auditAsTarget   AuditLog[] @relation("AuditTarget")
 
   @@map("users")
 }
@@ -186,4 +189,43 @@ model OAuthIdentity {
   @@unique([provider, subject])
   @@unique([userId, provider])
   @@map("oauth_identities")
+}
+
+/// Bitácora de seguridad: lo que un atacante (o un descuido) deja como rastro. Solo se escribe
+/// desde security-log.service.ts, que además la topa y la poda. NUNCA guarda correos, contraseñas,
+/// tokens ni la IP en claro: `ipHash` es un HMAC con llave del servidor (una IP son 32 bits: un
+/// SHA-256 simple se invierte en minutos probando las 4 mil millones de direcciones).
+model SecurityEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// login_failed | login_locked | two_factor_failed | refresh_reuse | google_rejected | rate_limited | csp_violation (CHECK en la base).
+  type      String   @db.VarChar(32)
+  /// La cuenta implicada, cuando se conoce. Si la cuenta se borra, el rastro se queda sin dueño.
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipHash    String?  @map("ip_hash") @db.Char(64)
+  /// Un código corto (bad_password, token_nonce, /api/auth/login…), nunca datos de la persona.
+  detail    String?  @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
+}
+
+/// Auditoría: quién (un humano con sesión) hizo qué sobre qué cuenta. Distinta de la bitácora de
+/// seguridad: aquí los hechos son legítimos, y lo que importa es poder reconstruirlos.
+model AuditLog {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// user_created | role_changed | user_disabled | user_enabled | two_factor_enabled | two_factor_disabled | recovery_codes_regenerated (CHECK en la base).
+  action    String   @db.VarChar(32)
+  actorId   String?  @map("actor_id") @db.Uuid
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  targetId  String?  @map("target_id") @db.Uuid
+  target    User?    @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  /// Un código corto (p. ej. el rol nuevo: «manager»).
+  detail    String?  @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("audit_logs")
 }
