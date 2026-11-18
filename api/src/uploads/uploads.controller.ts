@@ -1,6 +1,7 @@
 import { Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
+import { AnalysesModule } from '../analyses/analyses.controller.js';
 import { type AuthUser, CurrentUser } from '../auth/current-user.decorator.js';
 import { LEVEL, MinLevel } from '../common/auth/min-level.decorator.js';
 import { scaled } from '../common/http/throttle.js';
@@ -53,6 +54,7 @@ export class AdminUploadsController {
 }
 
 @Module({
+  imports: [AnalysesModule], // ResultsStorage: al borrar un archivo se retiran también los CSV de sus análisis
   controllers: [UploadsController, AdminUploadsController],
   providers: [UploadsService, UploadStorage],
 })

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin-users.controller.js';
+import { AnalysesModule } from './analyses/analyses.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule } from './auth/auth.module.js';
 import { LoggingThrottlerGuard } from './security/logging-throttler.guard.js';
@@ -26,6 +27,7 @@ import { UploadsModule } from './uploads/uploads.controller.js';
     AuthModule,
     AdminModule,
     UploadsModule,
+    AnalysesModule,
     HealthModule,
   ],
   providers: [

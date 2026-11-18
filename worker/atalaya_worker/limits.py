@@ -8,3 +8,12 @@ MAX_RATIO = 100  # descomprimido / comprimido; un .xlsx real ronda 5-20
 MAX_XML_BYTES = 40 * 1024 * 1024  # un solo XML interno
 CHUNK = 64 * 1024
 SECONDS_PER_FILE = 20  # tiempo máximo de revisión de un archivo (el latido caduca a los 30 s)
+
+# ── Análisis (v0.9) ──
+MAX_TEXT = 200  # texto de producto, sucursal o pedido; más se recorta (y se cuenta)
+SAMPLE_LEN = 40  # ejemplos de la vista previa y del informe: son DATO del archivo, se muestran recortados
+NAME_LEN = 60  # encabezados de columna
+MAX_ABS_AMOUNT = 10**12  # un importe mayor es un error de captura, no una venta
+MAX_DECIMALS = 6
+SECONDS_PER_ANALYSIS = 60  # leer y limpiar 50 000 filas; el latido va en otro hilo, así que no caduca
+EXAMPLES_PER_ISSUE = 5

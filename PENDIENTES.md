@@ -35,3 +35,9 @@
 - ✅ Laboratorio v0.8 (19 fichas) y capítulo v0.8 de la guía; `scripts/permisos-worker.sh` (21 rechazos y 4 permisos reales, con falla plantada) y su paso en el CI.
 - ⏳ **Falta en v0.8:** verificar el CI de GitHub con las dos contraseñas nuevas y el script de permisos; PR, CI y etiqueta (después de fusionar v0.7).
 - Idea para el panel: avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo).
+
+## Siguiente fase (v0.9) — avance 2026-11-18
+- ✅ Contrato (4 rutas), tabla `analyses` con sus CHECK y permisos del worker, volumen `results_data`, stream en el ACL de Redis, `permisos-worker.sh` ampliado (37 comprobaciones). Sin commit.
+- ✅ Módulo de análisis en la API (crear, mapeo validado, tope con candado, exportación, retirada de CSV al borrar): 31 pruebas unitarias nuevas (236 en total) y flujo verificado en vivo con el worker simulado. Sin commit.
+- ✅ Worker de análisis (lector, vista previa, limpieza con `Decimal`, informe, CSV con sanitizador anti fórmulas): 171 pruebas de Python y 11 e2e con el worker real; falla plantada en el sanitizador detectada. Sin commit.
+- ⏳ **Falta en v0.9:** pantallas (lista de análisis, formulario de mapeo con vista previa, informe de calidad, descargas) y su prueba en Chrome; laboratorio v0.9 y capítulo de la guía; verificar el CI de GitHub; commit, push y PR.

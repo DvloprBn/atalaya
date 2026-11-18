@@ -49,3 +49,40 @@ export const sheet = (rows = 3) =>
 export function workbook(extra: Record<string, Buffer | string> = {}, sheetXml = sheet()): Buffer {
   return makeZip({ '[Content_Types].xml': '<Types/>', 'xl/workbook.xml': '<workbook/>', 'xl/worksheets/sheet1.xml': sheetXml, ...extra });
 }
+
+type Cell = string | number | null;
+const colName = (i: number) => String.fromCharCode(65 + i);
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Un .xlsx que SÍ abre openpyxl (con sus relaciones y tipos de contenido completos), no el mínimo de `workbook()`.
+ * Los textos van como `inlineStr` (sin tabla de textos compartidos) y los números como números.
+ */
+export function realWorkbook(rows: Cell[][]): Buffer {
+  const sheetRows = rows
+    .map((row, r) => {
+      const cells = row
+        .map((value, c) => {
+          const ref = `${colName(c)}${r + 1}`;
+          if (value === null) return '';
+          return typeof value === 'number' ? `<c r="${ref}"><v>${value}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t>${esc(value)}</t></is></c>`;
+        })
+        .join('');
+      return `<row r="${r + 1}">${cells}</row>`;
+    })
+    .join('');
+  const main = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return makeZip({
+    '[Content_Types].xml':
+      '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    '_rels/.rels': `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    'xl/workbook.xml': `<?xml version="1.0"?><workbook xmlns="${main}" xmlns:r="${rel}"><sheets><sheet name="Ventas" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0"?><worksheet xmlns="${main}"><sheetData>${sheetRows}</sheetData></worksheet>`,
+  });
+}

@@ -30,6 +30,12 @@ echo "Postgres: lo que el worker SÍ puede"
 allowed "leer las columnas que necesita de uploads" "SELECT id, kind, sha256, size_bytes, storage_key, status, delete_requested_at FROM uploads LIMIT 1"
 allowed "actualizar status, reject_reason y checked_at (sin filas, pero con permiso)" \
   "UPDATE uploads SET status = 'queued', reject_reason = NULL, checked_at = NULL WHERE false"
+allowed "leer de analyses lo que necesita (estado, mapeo, llave de resultados)" \
+  "SELECT id, upload_id, status, mapping, result_key FROM analyses LIMIT 1"
+allowed "unir un análisis con su archivo (lo que lee el worker para trabajar)" \
+  "SELECT u.storage_key, u.kind, u.sha256, u.size_bytes, a.mapping FROM analyses a JOIN uploads u ON u.id = a.upload_id LIMIT 1"
+allowed "actualizar estado, vista previa, informe, motivo y fecha de un análisis" \
+  "UPDATE analyses SET status = 'failed', preview = NULL, report = NULL, fail_reason = 'unreadable', updated_at = now() WHERE false"
 
 echo "Postgres: lo que NO puede"
 denied "leer cuentas (users)"                "SELECT email FROM users LIMIT 1"
@@ -45,6 +51,11 @@ denied "insertar archivos"                   "INSERT INTO uploads(id) VALUES (ge
 denied "borrar una tabla"                    "DROP TABLE uploads"
 denied "crear tablas"                        "CREATE TABLE x(a int)"
 denied "crear roles"                         "CREATE ROLE intruso"
+denied "leer de quién es un análisis"        "SELECT owner_id FROM analyses LIMIT 1"
+denied "cambiar el mapeo que confirmó la persona" "UPDATE analyses SET mapping = NULL WHERE false"
+denied "cambiar el nombre de los resultados" "UPDATE analyses SET result_key = result_key WHERE false"
+denied "borrar análisis"                     "DELETE FROM analyses WHERE false"
+denied "insertar análisis"                   "INSERT INTO analyses(id) VALUES (gen_random_uuid())"
 
 # Redis como `worker`. Un comando prohibido responde NOPERM.
 rds() { docker compose exec -T redis redis-cli --user worker --pass "$WORKER_REDIS_PASSWORD" --no-auth-warning "$@" 2>&1; }
@@ -53,7 +64,10 @@ rdenied() { local out; out=$(rds "${@:2}" || true); if grep -q "NOPERM" <<<"$out
 
 echo "Redis: lo que el worker SÍ puede"
 rallowed "escribir su latido"                set atalaya:worker:heartbeat prueba EX 30
-rallowed "leer su cola con su grupo"         xreadgroup GROUP workers worker-1 COUNT 1 STREAMS atalaya:uploads 0
+rallowed "escribir su marca de etapa (SET NX)"     set atalaya:worker:started:prueba:preview 1 NX EX 10
+rallowed "leer su cola de archivos con su grupo"   xreadgroup GROUP workers worker-1 COUNT 1 STREAMS atalaya:uploads 0
+rallowed "crear su grupo en la cola de análisis"   xgroup create atalaya:analyses workers 0 MKSTREAM
+rallowed "leer su cola de análisis con su grupo"   xreadgroup GROUP workers worker-1 COUNT 1 STREAMS atalaya:analyses 0
 
 echo "Redis: lo que NO puede"
 rdenied "leer llaves (GET)"                       get atalaya:worker:heartbeat
@@ -61,7 +75,9 @@ rdenied "listar llaves (KEYS)"                    keys '*'
 rdenied "borrar todo (FLUSHALL)"                  flushall
 rdenied "escribir en llaves de la API (topes de login)" set atalaya:login-fail:x 1
 rdenied "AGREGAR trabajos a la cola (XADD)"       xadd atalaya:uploads '*' id x
+rdenied "AGREGAR trabajos a la cola de análisis"  xadd atalaya:analyses '*' id x
 rdenied "destruir el grupo de la cola"            xgroup destroy atalaya:uploads workers
+rdenied "destruir el grupo de la cola de análisis" xgroup destroy atalaya:analyses workers
 rdenied "leer la configuración (CONFIG GET)"      config get requirepass
 rdenied "cambiar usuarios (ACL SETUSER)"          acl setuser worker '+@all'
 

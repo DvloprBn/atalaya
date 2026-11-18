@@ -11,6 +11,9 @@ RUN uv sync --frozen --no-dev --no-install-project
 FROM python:3.14-slim
 # Usuario propio sin shell ni carpeta personal: si alguien lograra ejecutar código aquí, no es root.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin worker
+# Carpeta de resultados (la misma forma que en la imagen de la API, para que el volumen salga igual lo cree quien lo cree):
+# dueño uid 1000 (el de la API) + sticky 1777; el worker (10001) crea sus archivos y no puede borrar los ajenos.
+RUN mkdir -p /data/results && chown 1000:1000 /data/results && chmod 1777 /data/results
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY atalaya_worker ./atalaya_worker

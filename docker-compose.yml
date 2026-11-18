@@ -47,8 +47,8 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
-      # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP. En producción NO se pone (vale 1).
-      THROTTLE_SCALE: "5"
+      # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP (v0.9: ~110 subidas y análisis por corrida). En producción NO se pone (vale 1).
+      THROTTLE_SCALE: "10"
       # Login con Google. Por defecto apunta al servidor OAuth FALSO de abajo. Para usar Google de
       # verdad, pon los seis OAUTH_* en tu .env (ver .env.example); sin ellos, el valor de aquí manda.
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-atalaya-mock-client}
@@ -64,6 +64,7 @@ services:
       - ./api:/app
       - /app/node_modules
       - uploads_data:/data/uploads        # los archivos subidos: la API escribe
+      - results_data:/data/results        # los resultados de los análisis: el worker escribe; la API los entrega y los borra
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -84,6 +85,7 @@ services:
     tmpfs: [/tmp]
     volumes:
       - uploads_data:/data/uploads:ro  # lee los archivos subidos, NUNCA los modifica
+      - results_data:/data/results     # ÚNICO lugar donde escribe (su sistema de archivos sigue en solo lectura)
     mem_limit: 512m                    # un archivo hostil no puede comerse toda la RAM
     pids_limit: 64
     cpus: 1.0
@@ -178,6 +180,7 @@ services:
       - "on"
       - ">${WORKER_REDIS_PASSWORD:?define WORKER_REDIS_PASSWORD en .env}"
       - "~atalaya:uploads"
+      - "~atalaya:analyses"
       - "~atalaya:worker:*"
       - "-@all"
       - "+xgroup|create"
@@ -202,3 +205,4 @@ volumes:
   db_data: {}
   mailpit_data: {}
   uploads_data: {}
+  results_data: {}

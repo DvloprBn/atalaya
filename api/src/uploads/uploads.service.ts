@@ -12,6 +12,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { manageableLevels } from '../admin/hierarchy.js';
 import type { AuthUser } from '../auth/current-user.decorator.js';
+import { ResultsStorage } from '../analyses/results-storage.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { checkSignature, displayNameOf } from './file-signature.js';
@@ -34,6 +35,7 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly storage: UploadStorage,
+    private readonly results: ResultsStorage,
   ) {}
 
   onModuleInit() {
@@ -113,9 +115,13 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
     if (!row) throw new NotFoundException();
     // Si el worker lo está revisando solo se MARCA: el worker descarta su resultado y la poda borra la fila y el archivo.
     // Condicionado al estado en la propia sentencia: si cambió entre leer y escribir, no se borra lo que no se vio.
+    // Borrar el archivo borra sus análisis (cascada en la base): las llaves de sus CSV se leen ANTES, para retirarlos del disco.
+    const resultKeys = await this.resultKeysOf(id);
     const deleted = await this.prisma.upload.deleteMany({ where: { ...mine, status: { not: 'checking' } } });
-    if (deleted.count === 1) await this.storage.remove(row.storageKey);
-    else await this.prisma.upload.updateMany({ where: mine, data: { deleteRequestedAt: new Date() } });
+    if (deleted.count === 1) {
+      await this.storage.remove(row.storageKey);
+      await this.removeResults(resultKeys);
+    } else await this.prisma.upload.updateMany({ where: mine, data: { deleteRequestedAt: new Date() } });
     return { message: 'Archivo borrado' };
   }
 
@@ -144,11 +150,21 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
         take: 100,
       });
       for (const row of rows) {
+        const resultKeys = await this.resultKeysOf(row.id);
         await this.prisma.upload.deleteMany({ where: { id: row.id, status: { not: 'checking' } } });
         await this.storage.remove(row.storageKey);
+        await this.removeResults(resultKeys);
       }
     } catch (error) {
       this.log.warn(`Poda de subidas: ${(error as Error).message}`);
     }
+  }
+
+  private async resultKeysOf(uploadId: string): Promise<string[]> {
+    return (await this.prisma.analysis.findMany({ where: { uploadId }, select: { resultKey: true } })).map((a) => a.resultKey);
+  }
+
+  private async removeResults(keys: string[]): Promise<void> {
+    for (const key of keys) await this.results.removeAll(key);
   }
 }

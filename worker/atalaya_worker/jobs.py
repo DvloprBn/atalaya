@@ -8,31 +8,37 @@ import logging
 
 import redis
 
+from .analysis_jobs import handle_analysis
+from .analysis_store import AnalysisStore
+from .queues import ANALYSIS_STREAM, CONSUMER, GROUP, STREAMS, UPLOAD_STREAM
 from .review import review
 from .store import Store
 
-STREAM = "atalaya:uploads"  # el mismo nombre que api/src/uploads/uploads.service.ts
-GROUP = "workers"
-CONSUMER = "worker-1"  # estable a propósito: sus pendientes se recuperan al reiniciar
+STREAM = UPLOAD_STREAM  # (nombre histórico: la cola de archivos)
 
 log = logging.getLogger("atalaya.worker.jobs")
 
 
 def ensure_group(store: redis.Redis) -> None:
-    try:
-        store.xgroup_create(STREAM, GROUP, id="0", mkstream=True)
-    except redis.ResponseError as error:
-        if "BUSYGROUP" not in str(error):
-            raise  # «ya existe» es lo normal desde el segundo arranque
+    for stream in STREAMS:
+        try:
+            store.xgroup_create(stream, GROUP, id="0", mkstream=True)
+        except redis.ResponseError as error:
+            if "BUSYGROUP" not in str(error):
+                raise  # «ya existe» es lo normal desde el segundo arranque
 
 
-def fetch(store: redis.Redis, block_ms: int) -> list[tuple[str, str]]:
-    """(id de mensaje, id de archivo). Primero lo que quedó pendiente; si no hay, espera lo nuevo."""
+def fetch(store: redis.Redis, block_ms: int) -> list[tuple[str, str, str]]:
+    """(cola, id de mensaje, id del archivo o análisis). Primero lo pendiente de las dos colas; si no hay, espera lo nuevo."""
     for stream_id, wait in (("0", None), (">", block_ms)):
-        reply = store.xreadgroup(GROUP, CONSUMER, {STREAM: stream_id}, count=1, block=wait)
-        entries = reply[0][1] if reply else []
-        if entries:
-            return [(_text(mid), _text(fields.get(b"id") or fields.get("id"))) for mid, fields in entries]
+        reply = store.xreadgroup(GROUP, CONSUMER, dict.fromkeys(STREAMS, stream_id), count=1, block=wait)
+        found = [
+            (_text(name), _text(mid), _text(fields.get(b"id") or fields.get("id")))
+            for name, entries in reply or []
+            for mid, fields in entries
+        ]
+        if found:
+            return found
     return []
 
 
@@ -58,3 +64,13 @@ def handle(store: redis.Redis, db: Store, uploads_dir: str, message_id: str, upl
         db.finish(job.id, reason)
         log.info("archivo revisado: %s", reason or "accepted")
     store.xack(STREAM, GROUP, message_id)
+
+
+def dispatch(
+    queue: redis.Redis, db: Store, uploads_dir: str, results_dir: str, stream: str, message_id: str, item_id: str
+) -> None:
+    """Cada cola, a su trabajo: la de archivos revisa archivos; la de análisis prepara y limpia análisis."""
+    if stream == ANALYSIS_STREAM:
+        handle_analysis(queue, AnalysisStore(db), uploads_dir, results_dir, message_id, item_id)
+    else:
+        handle(queue, db, uploads_dir, message_id, item_id)

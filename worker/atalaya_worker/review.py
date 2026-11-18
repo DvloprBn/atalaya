@@ -3,13 +3,13 @@
 import hashlib
 import os
 import re
-import signal
 import stat
 
 from .inspect_csv import inspect_csv
 from .inspect_xlsx import inspect_xlsx
 from .limits import SECONDS_PER_FILE
 from .store import Job
+from .timelimit import time_limit
 from .verdict import Reject
 
 _KEY = re.compile(r"^[0-9a-f]{32}$")
@@ -35,35 +35,32 @@ def _read(uploads_dir: str, job: Job) -> bytes:
     return data
 
 
-def _on_alarm(_signum, _frame) -> None:  # noqa: ANN001
-    raise TimeoutError
+def load_verified(uploads_dir: str, job: Job) -> bytes:
+    """Los bytes del archivo, ya confirmados: tamaño y SHA-256 iguales a lo que la API guardó. Si no, `Reject`."""
+    data = _read(uploads_dir, job)
+    if hashlib.sha256(data).hexdigest() != job.sha256:  # el worker NO se fía de la API ni del disco
+        raise Reject("corrupt")
+    return data
 
 
 def review(uploads_dir: str, job: Job) -> str | None:
     """Devuelve None si el archivo pasó, o el motivo de rechazo. Con tope de tiempo (SIGALRM)."""
-    previous = signal.signal(signal.SIGALRM, _on_alarm)
-    signal.alarm(SECONDS_PER_FILE)
     try:
-        data = _read(uploads_dir, job)
-        # El worker NO se fía de la API: confirma que los bytes son los que ella guardó...
-        if hashlib.sha256(data).hexdigest() != job.sha256:
-            raise Reject("corrupt")
-        # ...y repite la comprobación de firma (defensa en capas).
-        if job.kind == "xlsx":
-            if not data.startswith(_PK):
+        with time_limit(SECONDS_PER_FILE):
+            data = load_verified(uploads_dir, job)
+            # ...y repite la comprobación de firma (defensa en capas).
+            if job.kind == "xlsx":
+                if not data.startswith(_PK):
+                    raise Reject("corrupt")
+                inspect_xlsx(data)
+            elif job.kind == "csv":
+                if data.startswith(_PK):
+                    raise Reject("corrupt")
+                inspect_csv(data)
+            else:
                 raise Reject("corrupt")
-            inspect_xlsx(data)
-        elif job.kind == "csv":
-            if data.startswith(_PK):
-                raise Reject("corrupt")
-            inspect_csv(data)
-        else:
-            raise Reject("corrupt")
         return None
     except Reject as rejected:
         return rejected.reason
     except TimeoutError:
         return "worker_timeout"
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, previous)

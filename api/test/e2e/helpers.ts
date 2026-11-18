@@ -30,6 +30,10 @@ export class Browser {
     return { status: res.status, body: text ? JSON.parse(text) : null };
   }
 
+  async put(path: string, body: unknown): Promise<ApiResponse> {
+    return this.request('PUT', path, body);
+  }
+
   async delete(path: string): Promise<ApiResponse> {
     return this.request('DELETE', path);
   }

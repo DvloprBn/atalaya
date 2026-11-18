@@ -636,6 +636,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mis análisis (20 por página, los más nuevos primero) */
+        get: operations["listAnalyses"];
+        put?: never;
+        /**
+         * Empieza el análisis de un archivo mío ya aceptado
+         * @description Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido); el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`. 404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay 10 análisis en la cuenta.
+         */
+        post: operations["createAnalysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Un análisis mío (estado, vista previa, mapeo e informe de calidad)
+         * @description 404 si no existe O es de otra cuenta (también para un admin).
+         */
+        get: operations["getAnalysis"];
+        put?: never;
+        post?: never;
+        /** Borra un análisis mío y sus resultados (el archivo subido no se toca) */
+        delete: operations["deleteAnalysis"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Confirma qué columna es cada campo y lanza la limpieza
+         * @description Paso 2 de 2. Solo con el análisis en `awaiting_mapping` (409 si no). `date` y `amount` son obligatorios; dos campos no pueden apuntar a la misma columna (400); un índice fuera de la vista previa, tampoco (400). Responde 202: el worker limpia el archivo y deja el informe de calidad en `getAnalysis`.
+         */
+        put: operations["putAnalysisMapping"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}/export/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+                /** @description `clean` = los datos ya limpios; `report` = el informe de calidad. */
+                kind: "clean" | "report";
+            };
+            cookie?: never;
+        };
+        /**
+         * Descarga un resultado como CSV
+         * @description Solo con el análisis en `done` (409 si no). **Anti inyección de fórmulas:** toda celda de TEXTO que empiece con `=`, `+`, `-`, `@`, tabulador o retorno de carro sale precedida de una comilla simple (`'`), para que Excel o Calc la lean como texto y no como fórmula. Las columnas numéricas y de fecha salen tipadas, sin tocar. Se entrega como adjunto, con tipo `text/csv` y UTF-8 con BOM (Excel en español lo abre bien).
+         */
+        get: operations["exportAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -875,6 +965,124 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        CreateAnalysisRequest: {
+            /** Format: uuid */
+            uploadId: string;
+        };
+        /**
+         * @description previewing = el worker lee el archivo · awaiting_mapping = espera que confirmes las columnas · queued/running = limpiando · done = hay informe y descargas · failed = ver `failReason`.
+         * @enum {string}
+         */
+        AnalysisStatus: "previewing" | "awaiting_mapping" | "queued" | "running" | "done" | "failed";
+        /**
+         * @description Lista CERRADA; nunca texto del archivo ni del error interno. nothing_left = tras la limpieza no sobró ninguna fila válida.
+         * @enum {string}
+         */
+        AnalysisFailReason: "unreadable" | "no_header" | "too_few_columns" | "mapping_invalid" | "nothing_left" | "worker_timeout";
+        /** @description Posición de la columna en el archivo (la primera es 0). El archivo tiene máximo 200 columnas. */
+        ColumnIndex: number;
+        Mapping: {
+            date: components["schemas"]["ColumnIndex"];
+            amount: components["schemas"]["ColumnIndex"];
+            quantity?: components["schemas"]["ColumnIndex"];
+            product?: components["schemas"]["ColumnIndex"];
+            branch?: components["schemas"]["ColumnIndex"];
+            orderId?: components["schemas"]["ColumnIndex"];
+            /**
+             * @description Orden de las fechas con diagonales (`03/04/2026`). `auto` decide por los datos; si todas las fechas son ambiguas, usa día/mes/año (México) y lo avisa en el informe (`ambiguous_dates`).
+             * @default auto
+             * @enum {string}
+             */
+            dateOrder: "auto" | "dmy" | "mdy" | "ymd";
+            /**
+             * @description Separador decimal de los importes (`1,234.50` o `1.234,50`).
+             * @default auto
+             * @enum {string}
+             */
+            decimalSeparator: "auto" | "." | ",";
+        };
+        PreviewColumn: {
+            index: components["schemas"]["ColumnIndex"];
+            /** @description Encabezado del archivo, recortado y sin caracteres de control. */
+            name: string;
+            /** @description Hasta 5 valores de ejemplo, recortados. Es DATO del archivo: se muestra como texto, nunca como HTML. */
+            samples: string[];
+        };
+        AnalysisPreview: {
+            columns: components["schemas"]["PreviewColumn"][];
+            /** @description Filas de datos (sin el encabezado). */
+            rowCount: number;
+            /** @description El mapeo que el worker adivina por nombres y contenido. Solo es una sugerencia. */
+            suggested: components["schemas"]["SuggestedMapping"];
+        };
+        SuggestedMapping: {
+            date?: components["schemas"]["ColumnIndex"];
+            amount?: components["schemas"]["ColumnIndex"];
+            quantity?: components["schemas"]["ColumnIndex"];
+            product?: components["schemas"]["ColumnIndex"];
+            branch?: components["schemas"]["ColumnIndex"];
+            orderId?: components["schemas"]["ColumnIndex"];
+        };
+        /**
+         * @description Lista CERRADA de problemas que la limpieza sabe reconocer. Los primeros cinco y `bad_quantity` TIRAN la fila; `negative_amount`, `zero_amount` y `ambiguous_dates` solo AVISAN; `text_trimmed` y `text_truncated` son arreglos menores (espacios, y texto de más de 200 caracteres). Nada se descarta sin quedar contado aquí.
+         * @enum {string}
+         */
+        IssueCode: "blank_row" | "duplicate_row" | "bad_date" | "future_date" | "bad_amount" | "negative_amount" | "zero_amount" | "bad_quantity" | "ambiguous_dates" | "text_trimmed" | "text_truncated";
+        QualityIssue: {
+            code: components["schemas"]["IssueCode"];
+            count: number;
+            /** @description ¿Las filas con este problema se descartaron? */
+            dropped: boolean;
+            examples: components["schemas"]["IssueExample"][];
+        };
+        IssueExample: {
+            /** @description Número de fila en el archivo (el encabezado es la 1). */
+            row: number;
+            /** @description Lo que decía la celda, recortado. Es DATO del archivo: solo texto. */
+            value: string;
+        };
+        ColumnQuality: {
+            /** @enum {string} */
+            field: "date" | "amount" | "quantity" | "product" | "branch" | "orderId";
+            /** @description Filas leídas con algo en esta columna. */
+            filled: number;
+            /** @description Filas con algo que no se pudo leer. */
+            invalid: number;
+        };
+        QualityReport: {
+            rowsRead: number;
+            rowsKept: number;
+            rowsDropped: number;
+            /** Format: date */
+            dateFrom: string | null;
+            /** Format: date */
+            dateTo: string | null;
+            /** @description Suma de los importes que se conservaron, como TEXTO decimal exacto (nunca un número de punto flotante). */
+            totalAmount: string;
+            columns: components["schemas"]["ColumnQuality"][];
+            issues: components["schemas"]["QualityIssue"][];
+        };
+        Analysis: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            uploadId: string;
+            status: components["schemas"]["AnalysisStatus"];
+            failReason: components["schemas"]["AnalysisFailReason"] | null;
+            preview: components["schemas"]["AnalysisPreview"] | null;
+            mapping: components["schemas"]["Mapping"] | null;
+            report: components["schemas"]["QualityReport"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AnalysisPage: {
+            items: components["schemas"]["Analysis"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
     };
     responses: {
         /** @description Los códigos nuevos. Se muestran UNA vez; la base solo guarda su hash. */
@@ -924,6 +1132,7 @@ export interface components {
         };
     };
     parameters: {
+        AnalysisId: string;
         UploadId: string;
         UserId: string;
     };
@@ -1700,6 +1909,165 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    listAnalyses: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de análisis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    createAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Aceptado; el worker prepara la vista previa (`status` = previewing) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            /** @description Se superó el tope de peticiones */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El análisis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    putAnalysisMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Mapping"];
+            };
+        };
+        responses: {
+            /** @description Aceptado; en cola (`status` = queued) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    exportAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+                /** @description `clean` = los datos ya limpios; `report` = el informe de calidad. */
+                kind: "clean" | "report";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El CSV */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
 }

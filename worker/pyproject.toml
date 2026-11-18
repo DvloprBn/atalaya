@@ -6,6 +6,7 @@ requires-python = ">=3.14"
 license = "MIT"
 dependencies = [
     "defusedxml>=0.7.1",
+    "openpyxl>=3.1.5",
     "psycopg[binary]>=3.3.9",
     "redis>=8.1.0",
 ]

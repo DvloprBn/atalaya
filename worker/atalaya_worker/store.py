@@ -27,7 +27,7 @@ class Store:
         self._dsn = dsn
         self._conn: psycopg.Connection | None = None
 
-    def _db(self) -> psycopg.Connection:
+    def conn(self) -> psycopg.Connection:
         if self._conn is None or self._conn.closed:
             self._conn = psycopg.connect(self._dsn, autocommit=True, connect_timeout=5)
         return self._conn
@@ -46,7 +46,7 @@ class Store:
         murió sin terminar, y un archivo que ya mató al worker una vez NO se vuelve a abrir.
         """
         row = (
-            self._db()
+            self.conn()
             .execute(
                 "WITH old AS (SELECT id, status FROM uploads WHERE id = %s AND delete_requested_at IS NULL "
                 "AND status IN ('queued', 'checking') FOR UPDATE) "
@@ -64,7 +64,7 @@ class Store:
     def finish(self, upload_id: str, reason: str | None) -> None:
         """Deja el resultado. Solo si sigue en «checking»: nunca pisa un estado que otro ya cambió."""
         status = "accepted" if reason is None else "rejected"
-        self._db().execute(
+        self.conn().execute(
             "UPDATE uploads SET status = %s, reject_reason = %s, checked_at = now() WHERE id = %s AND status = 'checking'",
             (status, reason, upload_id),
         )
