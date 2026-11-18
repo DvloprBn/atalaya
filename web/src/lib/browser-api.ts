@@ -15,6 +15,10 @@ export type RecoveryCodes = components['schemas']['RecoveryCodes'];
 export type Upload = components['schemas']['Upload'];
 export type UploadPage = components['schemas']['UploadPage'];
 export type AdminUploadPage = components['schemas']['AdminUploadPage'];
+export type Analysis = components['schemas']['Analysis'];
+export type AnalysisPage = components['schemas']['AnalysisPage'];
+export type AnalysisMapping = components['schemas']['Mapping'];
+export type QualityReport = components['schemas']['QualityReport'];
 type ApiError = components['schemas']['Error'];
 
 export interface ApiResult<T> {
@@ -35,7 +39,7 @@ const NEEDS_SESSION = (path: string) =>
 
 let refreshing: Promise<boolean> | null = null;
 
-async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<ApiResult<T>> {
+async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<ApiResult<T>> {
   let res = await send(method, path, body);
   // El acceso dura 10 min. Si venció (401), se pide UNA renovación y se repite una vez.
   // Varias llamadas a la vez comparten la misma renovación: si cada una renovara por
@@ -53,6 +57,7 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
   /** Subida de un archivo (multipart). El navegador pone el content-type con su límite; NO se fija a mano. */
   upload: <T>(path: string, form: FormData) => request<T>('POST', path, form),

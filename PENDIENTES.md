@@ -40,4 +40,5 @@
 - ✅ Contrato (4 rutas), tabla `analyses` con sus CHECK y permisos del worker, volumen `results_data`, stream en el ACL de Redis, `permisos-worker.sh` ampliado (37 comprobaciones). Sin commit.
 - ✅ Módulo de análisis en la API (crear, mapeo validado, tope con candado, exportación, retirada de CSV al borrar): 31 pruebas unitarias nuevas (236 en total) y flujo verificado en vivo con el worker simulado. Sin commit.
 - ✅ Worker de análisis (lector, vista previa, limpieza con `Decimal`, informe, CSV con sanitizador anti fórmulas): 171 pruebas de Python y 11 e2e con el worker real; falla plantada en el sanitizador detectada. Sin commit.
-- ⏳ **Falta en v0.9:** pantallas (lista de análisis, formulario de mapeo con vista previa, informe de calidad, descargas) y su prueba en Chrome; laboratorio v0.9 y capítulo de la guía; verificar el CI de GitHub; commit, push y PR.
+- ✅ Pantallas de análisis (`/analisis`, `/analisis/[id]`, botón Analizar): 7 pruebas nuevas en Chrome real (suite completa: 27), con descarga real y un ataque XSS por encabezado de columna. Sin commit.
+- ⏳ **Falta en v0.9:** laboratorio v0.9 y capítulo de la guía; verificar el CI de GitHub (también el de v0.8, que sigue sin PR); commit, push y PR.
