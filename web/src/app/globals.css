@@ -63,6 +63,12 @@ input, select {
   font-size: 15px;
 }
 select { padding-right: 8px; }
+/* El selector de archivos: su botón interno sigue el mismo lenguaje que los demás botones. */
+input[type='file'] { height: auto; padding: 8px 12px; }
+input[type='file']::file-selector-button {
+  min-height: 34px; margin-right: 12px; padding: 0 14px; border: 0; border-radius: 6px;
+  background: var(--signal); color: var(--signal-ink); font: inherit; font-weight: 600; cursor: pointer;
+}
 input::placeholder { color: var(--faint); }
 
 button, a.button {
@@ -108,3 +114,6 @@ th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
 }
 .chip[data-state='ok']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 .chip[data-state='down']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--anomaly); }
+
+/* Texto solo para lectores de pantalla (p. ej. la cabecera de una columna de botones). */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
