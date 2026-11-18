@@ -81,6 +81,8 @@ jobs:
         run: |
           sed -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
               -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 24)/" \
+              -e "s/^WORKER_REDIS_PASSWORD=.*/WORKER_REDIS_PASSWORD=$(openssl rand -hex 24)/" \
+              -e "s/^WORKER_DB_PASSWORD=.*/WORKER_DB_PASSWORD=$(openssl rand -hex 24)/" \
               -e "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" \
               -e "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
               -e "s/^OAUTH_CLIENT_SECRET=.*/OAUTH_CLIENT_SECRET=$(openssl rand -hex 24)/" .env.example > .env

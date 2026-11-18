@@ -566,6 +566,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mis archivos subidos (20 por página, los más nuevos primero)
+         * @description Solo los de quien pregunta. Nunca devuelve contenido, solo metadatos y estado.
+         */
+        get: operations["listUploads"];
+        put?: never;
+        /**
+         * Sube un archivo (CSV o XLSX) y lo encola para su revisión
+         * @description multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV ni XLSX, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415. **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
+         */
+        post: operations["createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Estado de un archivo mío
+         * @description 404 si no existe O si es de otra cuenta (nunca 403, para no confirmar que existe), también para un admin.
+         */
+        get: operations["getUpload"];
+        put?: never;
+        post?: never;
+        /**
+         * Borra un archivo mío (el original y sus resultados)
+         * @description Mismo 404 que `getUpload`. Si el worker lo está revisando, se marca y el worker descarta el resultado.
+         */
+        delete: operations["deleteUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metadatos de los archivos de las cuentas de nivel menor al tuyo (20 por página)
+         * @description Exige nivel admin (3) o más. Solo dueño, tamaño, tipo, estado y fecha: el admin administra cuentas, NO lee datos (nunca hay ruta para el contenido ni para el nombre original). Misma regla de visibilidad que `adminListUsers`.
+         */
+        get: operations["adminListUploads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -750,6 +820,61 @@ export interface components {
                 worker: components["schemas"]["CheckState"];
             };
         };
+        UploadRequest: {
+            /**
+             * Format: binary
+             * @description CSV o XLSX, máximo 5 MB
+             */
+            file: string;
+        };
+        /**
+         * @description queued = en la cola · checking = el worker lo revisa · accepted = pasó la revisión profunda · rejected = no pasó (ver `rejectReason`).
+         * @enum {string}
+         */
+        UploadStatus: "queued" | "checking" | "accepted" | "rejected";
+        /**
+         * @description Lista CERRADA; nunca texto libre del archivo ni del error interno. Los rechazos de la API (tamaño, firma, macros) no llegan aquí: se responden 413/415 y no se guarda nada.
+         * @enum {string}
+         */
+        UploadRejectReason: "zip_bomb" | "too_many_entries" | "range_too_large" | "corrupt" | "empty" | "worker_timeout";
+        Upload: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "csv" | "xlsx";
+            /** @description Nombre original saneado, solo para mostrárselo a su dueño. Se omite si no hay. */
+            displayName?: string;
+            sizeBytes: number;
+            status: components["schemas"]["UploadStatus"];
+            rejectReason: components["schemas"]["UploadRejectReason"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            checkedAt: string | null;
+        };
+        UploadPage: {
+            items: components["schemas"]["Upload"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
+        AdminUpload: {
+            /** Format: uuid */
+            id: string;
+            ownerEmail: components["schemas"]["Email"];
+            /** @enum {string} */
+            kind: "csv" | "xlsx";
+            sizeBytes: number;
+            status: components["schemas"]["UploadStatus"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminUploadPage: {
+            items: components["schemas"]["AdminUpload"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
     };
     responses: {
         /** @description Los códigos nuevos. Se muestran UNA vez; la base solo guarda su hash. */
@@ -799,6 +924,7 @@ export interface components {
         };
     };
     parameters: {
+        UploadId: string;
         UserId: string;
     };
     requestBodies: {
@@ -1447,6 +1573,133 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listUploads: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de archivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    createUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Aceptado y en cola (`status` = queued) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            413: components["responses"]["Error"];
+            415: components["responses"]["Error"];
+            /** @description Se superó el tope de peticiones */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    adminListUploads: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de metadatos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUploadPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
 }

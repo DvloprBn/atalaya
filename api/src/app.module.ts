@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.controller.js';
 import { MailModule } from './mail/mail.service.js';
 import { PrismaModule } from './prisma/prisma.service.js';
 import { RedisModule } from './redis/redis.service.js';
+import { UploadsModule } from './uploads/uploads.controller.js';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RedisModule } from './redis/redis.service.js';
     MailModule,
     AuthModule,
     AdminModule,
+    UploadsModule,
     HealthModule,
   ],
   providers: [

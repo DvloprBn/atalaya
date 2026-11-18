@@ -16,10 +16,10 @@ datasource db {
 /// Los 6 niveles de permiso (0 = usuario … 5 = super). Filas FIJAS: las siembra
 /// la migración, no el código. `maxCount` = cuántas cuentas puede haber (null = sin límite).
 model Role {
-  id       Int     @id
-  name     String  @unique @db.VarChar(20)
-  level    Int     @unique
-  maxCount Int?    @map("max_count")
+  id       Int    @id
+  name     String @unique @db.VarChar(20)
+  level    Int    @unique
+  maxCount Int?   @map("max_count")
   users    User[]
 
   @@map("roles")
@@ -27,26 +27,27 @@ model Role {
 
 /// Una persona, una cuenta. Solo existe cuando su correo ya se verificó (ver EmailToken).
 model User {
-  id              String    @id @default(uuid(7)) @db.Uuid
+  id              String          @id @default(uuid(7)) @db.Uuid
   /// Siempre en minúsculas (lo exige un CHECK en la base).
-  email           String    @unique @db.VarChar(254)
+  email           String          @unique @db.VarChar(254)
   /// Argon2id. null mientras una invitación no se acepta (y en cuentas que solo entran con Google, v0.5).
-  passwordHash    String?   @map("password_hash")
-  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
-  roleId          Int       @map("role_id")
-  role            Role      @relation(fields: [roleId], references: [id])
+  passwordHash    String?         @map("password_hash")
+  emailVerifiedAt DateTime?       @map("email_verified_at") @db.Timestamptz(3)
+  roleId          Int             @map("role_id")
+  role            Role            @relation(fields: [roleId], references: [id])
   /// Cuenta desactivada: no entra y sus sesiones dejan de servir al instante.
-  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(3)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  disabledAt      DateTime?       @map("disabled_at") @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions        Session[]
   emailTokens     EmailToken[]
   twoFactor       TwoFactor?
   recoveryCodes   RecoveryCode[]
   oauthIdentities OAuthIdentity[]
   securityEvents  SecurityEvent[]
-  auditAsActor    AuditLog[] @relation("AuditActor")
-  auditAsTarget   AuditLog[] @relation("AuditTarget")
+  auditAsActor    AuditLog[]      @relation("AuditActor")
+  auditAsTarget   AuditLog[]      @relation("AuditTarget")
+  uploads         Upload[]
 
   @@map("users")
 }
@@ -228,4 +229,36 @@ model AuditLog {
 
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+/// Un archivo subido (CSV o XLSX) y el resultado de su revisión. Aquí viven solo METADATOS: los bytes están en
+/// el volumen de subidas, bajo `storageKey`. El admin lista estos metadatos, nunca el contenido (decisión de arranque).
+/// Las reglas de forma (tipos, estados, coherencia estado↔motivo↔fecha) las impone un CHECK en la base.
+model Upload {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  /// Si la cuenta se borra, sus archivos también (en cascada; el demo de v1.0 lo necesita).
+  ownerId           String    @map("owner_id") @db.Uuid
+  owner             User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// csv | xlsx. Sale de la FIRMA de los bytes, no de la extensión.
+  kind              String    @db.VarChar(8)
+  /// Nombre original saneado, solo para mostrárselo a su dueño. Nunca se usa como ruta.
+  displayName       String?   @map("display_name") @db.VarChar(100)
+  sizeBytes         Int       @map("size_bytes")
+  /// SHA-256 en hex del contenido: el worker comprueba que lo que lee es lo que la API guardó.
+  sha256            String    @db.Char(64)
+  /// Nombre de archivo generado por el servidor (uuid v4 sin guiones); nunca viene del usuario.
+  storageKey        String    @unique @map("storage_key") @db.Char(32)
+  /// queued | checking | accepted | rejected
+  status            String    @default("queued") @db.VarChar(16)
+  /// Solo cuando status = rejected; lista cerrada (CHECK).
+  rejectReason      String?   @map("reject_reason") @db.VarChar(24)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Cuándo terminó la revisión del worker (accepted o rejected).
+  checkedAt         DateTime? @map("checked_at") @db.Timestamptz(3)
+  /// Borrado pedido mientras el worker revisaba: el worker descarta su resultado y una poda quita la fila.
+  deleteRequestedAt DateTime? @map("delete_requested_at") @db.Timestamptz(3)
+
+  @@index([ownerId, createdAt])
+  @@index([status, createdAt])
+  @@map("uploads")
 }

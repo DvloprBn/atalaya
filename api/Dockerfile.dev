@@ -7,6 +7,8 @@ RUN apk add --no-cache tini
 WORKDIR /app
 # La carpeta de trabajo es de "node": ahí escribe lo que genera (cliente de Prisma, dist/, .next/).
 RUN chown node:node /app
+# Carpeta de las subidas (v0.8): el volumen nombrado hereda este dueño al crearse.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 # Prisma sugiere actualizar a "latest", que hoy es un RC: se apaga el aviso (versión fijada a propósito).
 ENV PRISMA_HIDE_UPDATE_MESSAGE=1

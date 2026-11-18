@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.7.0
+  version: 0.8.0
   license:
     name: MIT
     identifier: MIT
@@ -446,8 +446,101 @@ paths:
             schema: { type: array, items: { type: object } }
       responses:
         "204": { description: Recibido }
+  /uploads:
+    get:
+      operationId: listUploads
+      summary: Mis archivos subidos (20 por página, los más nuevos primero)
+      description: Solo los de quien pregunta. Nunca devuelve contenido, solo metadatos y estado.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de archivos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createUpload
+      summary: Sube un archivo (CSV o XLSX) y lo encola para su revisión
+      description: >
+        multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:**
+        tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type
+        (415 si no es CSV ni XLSX, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta
+        (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y
+        cualquier otro formato con macros se rechazan con 415. **En el worker, ya encolado:** bomba zip (tamaño
+        descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado. Responde
+        202: el resultado de la revisión profunda se consulta con `getUpload`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/UploadRequest" }
+      responses:
+        "202":
+          description: Aceptado y en cola (`status` = queued)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upload" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "429":
+          description: Se superó el tope de peticiones
+  /uploads/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      operationId: getUpload
+      summary: Estado de un archivo mío
+      description: 404 si no existe O si es de otra cuenta (nunca 403, para no confirmar que existe), también para un admin.
+      responses:
+        "200":
+          description: El archivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upload" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteUpload
+      summary: Borra un archivo mío (el original y sus resultados)
+      description: Mismo 404 que `getUpload`. Si el worker lo está revisando, se marca y el worker descarta el resultado.
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/uploads:
+    get:
+      operationId: adminListUploads
+      summary: Metadatos de los archivos de las cuentas de nivel menor al tuyo (20 por página)
+      description: >
+        Exige nivel admin (3) o más. Solo dueño, tamaño, tipo, estado y fecha: el admin administra cuentas, NO lee
+        datos (nunca hay ruta para el contenido ni para el nombre original). Misma regla de visibilidad que
+        `adminListUsers`.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de metadatos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUploadPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   parameters:
+    UploadId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     UserId:
       name: id
       in: path
@@ -788,3 +881,66 @@ components:
             database: { $ref: "#/components/schemas/CheckState" }
             redis: { $ref: "#/components/schemas/CheckState" }
             worker: { $ref: "#/components/schemas/CheckState" }
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required: [file]
+      properties:
+        file: { type: string, format: binary, description: "CSV o XLSX, máximo 5 MB" }
+    UploadStatus:
+      type: string
+      enum: [queued, checking, accepted, rejected]
+      description: >
+        queued = en la cola · checking = el worker lo revisa · accepted = pasó la revisión profunda ·
+        rejected = no pasó (ver `rejectReason`).
+    UploadRejectReason:
+      type: string
+      enum: [zip_bomb, too_many_entries, range_too_large, corrupt, empty, worker_timeout]
+      description: >
+        Lista CERRADA; nunca texto libre del archivo ni del error interno. Los rechazos de la API (tamaño, firma,
+        macros) no llegan aquí: se responden 413/415 y no se guarda nada.
+    Upload:
+      type: object
+      additionalProperties: false
+      required: [id, kind, sizeBytes, status, rejectReason, createdAt, checkedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [csv, xlsx] }
+        displayName: { type: string, maxLength: 100, description: "Nombre original saneado, solo para mostrárselo a su dueño. Se omite si no hay." }
+        sizeBytes: { type: integer, minimum: 1, maximum: 5242880 }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        rejectReason:
+          oneOf:
+            - { $ref: "#/components/schemas/UploadRejectReason" }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        checkedAt: { type: [string, "null"], format: date-time }
+    UploadPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Upload" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    AdminUpload:
+      type: object
+      additionalProperties: false
+      required: [id, ownerEmail, kind, sizeBytes, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        ownerEmail: { $ref: "#/components/schemas/Email" }
+        kind: { type: string, enum: [csv, xlsx] }
+        sizeBytes: { type: integer }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        createdAt: { type: string, format: date-time }
+    AdminUploadPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminUpload" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }

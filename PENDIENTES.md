@@ -6,7 +6,7 @@
 
 | Id | Qué | Quién | Cuándo |
 |---|---|---|---|
-| S-1 | La contraseña de Redis va en los argumentos de `redis-server` y en las URLs (visible con `docker inspect`). En producción: archivo ACL montado y secretos de Docker. Además, el worker tendrá su propio usuario de Redis, limitado a sus llaves y a la cola. | Claude | v0.8 (usuario del worker) · v1.0 (ACL y secretos) |
+| S-1 | La contraseña de Redis va en los argumentos de `redis-server` y en las URLs (visible con `docker inspect`). En producción: archivo ACL montado y secretos de Docker. El usuario de Redis y el rol de base del worker **ya existen y son mínimos (v0.8)**; falta el archivo ACL y los secretos de Docker. | Claude | v1.0 (ACL y secretos) |
 | S-2 | La CSP sigue en **solo reporte**. Ya hay recolector (v0.7) y los reportes se ven en el panel; falta observarlos un tiempo y pasar a bloqueo. | Claude | v1.0 (bloqueo) |
 | ~~S-7~~ | ~~Intentos fallidos y robos de refresh sin bitácora, y sin aviso al dueño~~ **Resuelto en v0.7**: `security_events` + correo «Cerramos tus sesiones». | Claude | ✅ v0.7 |
 | S-9 | La llave `TOTP_ENCRYPTION_KEY` no se puede rotar: no hay forma de re-cifrar los secretos con una llave nueva. El formato guarda una versión (`v1.`) para poder añadirlo. Y si se pierde, los secretos son irrecuperables (quedan los códigos de recuperación): respaldarla **aparte** de la base. | Claude | v1.0 |
@@ -27,8 +27,8 @@
 |---|---|---|---|
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
-## Siguiente fase (v0.8)
-- Contrato primero: subida de archivos, estado de un análisis.
-- Subida segura (tamaño, tipo por firma, no por extensión), cola en Redis y worker con **rol de base mínimo** y **usuario de Redis propio** (S-1, parte del worker).
-- Laboratorio v0.8: bomba zip, firma falsa, rango gigante, `.xlsm`.
+## Siguiente fase (v0.8) — avance 2026-11-18
+- ✅ Contrato, tabla `uploads` y módulo de subida en la API (19 pruebas e2e de ataque, 14 unitarias nuevas). Sin commit.
+- ✅ Worker (revisión profunda, rol de base y usuario de Redis mínimos): 37 pruebas de Python y 11 e2e de archivos hostiles; recuperación de un worker caído probada en vivo.
+- ⏳ **Falta en v0.8:** laboratorio v0.8 y su capítulo en `GUIA_RECORRIDO.md` (bomba zip, rango gigante, XXE, `.xlsm`, permisos del rol); pantalla de subida en la web (con la casilla de «sin datos reales» que llega en v1.0 aún no); verificar el CI de GitHub con las dos contraseñas nuevas; commit y PR.
 - Idea para el panel: avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo).

@@ -63,6 +63,7 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules
+      - uploads_data:/data/uploads        # los archivos subidos: la API escribe
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -74,14 +75,42 @@ services:
     build: { context: ./worker }
     <<: *hardening
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Usuario de Redis PROPIO, con permiso solo para la cola y su latido (ver `redis` abajo), y rol de base
+      # MÍNIMO (migración uploads_worker_role). No usa las credenciales de la API: si cae el worker, no cae todo.
+      REDIS_URL: redis://worker:${WORKER_REDIS_PASSWORD:?define WORKER_REDIS_PASSWORD en .env}@redis:6379
+      DATABASE_URL: postgresql://atalaya_worker:${WORKER_DB_PASSWORD:?define WORKER_DB_PASSWORD en .env}@db:5432/${POSTGRES_DB}
+      UPLOAD_DIR: /data/uploads
     read_only: true                    # no puede escribir en su propio disco
     tmpfs: [/tmp]
+    volumes:
+      - uploads_data:/data/uploads:ro  # lee los archivos subidos, NUNCA los modifica
     mem_limit: 512m                    # un archivo hostil no puede comerse toda la RAM
     pids_limit: 64
     cpus: 1.0
     depends_on:
       redis: { condition: service_healthy }
+    networks: [data]
+
+  # Pone LOGIN y contraseña al rol `atalaya_worker` (que la migración crea sin poder entrar) y termina.
+  # Espera a que la migración exista el rol: en un arranque en limpio, corre `prisma migrate deploy` y listo.
+  db-roles:
+    image: postgres:18-alpine
+    <<: *hardening
+    restart: "no"
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?define WORKER_DB_PASSWORD en .env}
+    command:
+      - sh
+      - -c
+      - |
+        until psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'atalaya_worker'" | grep -q 1; do sleep 2; done
+        echo "ALTER ROLE atalaya_worker LOGIN PASSWORD :'pw'" | psql -v ON_ERROR_STOP=1 -v pw="$$WORKER_DB_PASSWORD"
+    depends_on:
+      db: { condition: service_healthy }
     networks: [data]
 
   # Servidor de correo FALSO para desarrollo: recibe todo y no entrega nada a nadie.
@@ -137,7 +166,25 @@ services:
 
   redis:
     image: redis:8-alpine
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    # `default` (la API) sigue con contraseña. El usuario `worker` solo puede: crear su grupo de la cola, leer y
+    # confirmar mensajes de `atalaya:uploads`, y escribir su latido. Cualquier otro comando o llave: rechazado.
+    # (La contraseña va en los argumentos: S-1 sigue abierto para v1.0, que la pasa a un archivo ACL con secretos.)
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --user
+      - worker
+      - "on"
+      - ">${WORKER_REDIS_PASSWORD:?define WORKER_REDIS_PASSWORD en .env}"
+      - "~atalaya:uploads"
+      - "~atalaya:worker:*"
+      - "-@all"
+      - "+xgroup|create"
+      - "+xreadgroup"
+      - "+xack"
+      - "+set"
+
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD} # redis-cli toma la contraseña de aquí, no de la línea de comandos
     healthcheck:
@@ -154,3 +201,4 @@ networks:
 volumes:
   db_data: {}
   mailpit_data: {}
+  uploads_data: {}

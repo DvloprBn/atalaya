@@ -5,6 +5,8 @@
 # (uid 1000) no podría escribir el cliente de Prisma ni compilar.
 services:
   api:
-    volumes: !reset []
+    # Sin el código montado, pero CON el volumen de subidas (lo comparte con el worker).
+    volumes: !override
+      - uploads_data:/data/uploads
   web:
     volumes: !reset []
