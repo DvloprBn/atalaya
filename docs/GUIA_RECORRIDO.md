@@ -2,7 +2,7 @@
 
 > Una sola guía, en orden. Cada fase agrega su capítulo al final. Léela con el código abierto al lado: cada paso nombra el archivo exacto.
 >
-> **Capítulo actual: v0.8, la subida de archivos.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
+> **Capítulo actual: v0.9, el análisis de ventas.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
 
 ---
 
@@ -664,7 +664,99 @@ El mensaje de la cola solo se confirma al terminar. Si el worker muere, el mensa
 ### 7. Lo que sigue pendiente (y por qué)
 
 - La contraseña de Redis sigue en los argumentos de `redis-server` (S-1): el archivo ACL y los secretos de Docker llegan en v1.0.
-- Un CSV en latin1 (típico de Excel en español) se rechaza; se revisa en v0.9.
+- Un CSV en latin1 (típico de Excel en español) se rechaza. *(En v0.9 no se resolvió: sigue pendiente.)*
 - S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
 - Los archivos huérfanos (la API cae entre guardar y anotar) los barre la poda de v1.0.
 - El **análisis** de lo subido (lector de ventas, mapeo de columnas, informe de calidad) empieza en v0.9: hoy un archivo «aceptado» solo significa *«no es peligroso»*, no *«es útil»*.
+
+---
+
+## Capítulo v0.9: los datos de un desconocido, de vuelta a sus manos
+
+> Lo nuevo: el **análisis de ventas** en dos pasos (vista previa y confirmar las columnas → limpieza e informe de calidad), un **worker** que lee CSV y `.xlsx` con `openpyxl`, dos descargas en CSV y las pantallas **Mis análisis**. Ataques y defensas en [`laboratorio/v0.9-analisis.md`](laboratorio/v0.9-analisis.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # tabla analyses (y sus permisos para el worker)
+docker compose up -d                                # el volumen de resultados y el stream nuevo en el ACL de Redis
+./scripts/permisos-worker.sh                        # el worker solo puede lo que debe (38 comprobaciones)
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`), sube un CSV en **Mis archivos** y pulsa **Analizar**. Elige las columnas (ya vienen sugeridas), confirma, y mira el informe. Descarga el CSV limpio. Para ver el ataque de la fase, sube un archivo con un producto que diga `=HYPERLINK("http://x","y")` y comprueba que en el CSV sale con una comilla delante.
+
+### 2. La idea: lo que entra como texto puede salir como instrucción
+
+En v0.8 el peligro era que un archivo dañara al sistema. Aquí es **lo inverso**: el sistema lee datos que escribió un desconocido y los **devuelve** (en una pantalla, en un informe, en un CSV que abrirá una hoja de cálculo). Tres cosas se vuelven peligrosas por el camino de vuelta:
+
+| El dato… | Se vuelve… | La defensa |
+|---|---|---|
+| un nombre de columna con `<img onerror=…>` | **código en la pantalla** de otra persona (XSS) | React escapa todo; el worker recorta y limpia; nunca se pinta como HTML |
+| un producto con `=HYPERLINK(…)` | **una fórmula** que ejecuta Excel al abrir el CSV | un solo sanitizador antepone `'` |
+| una fecha `03/04/2026` | **un dato equivocado** sin que nadie lo note | se decide por la columna y, si se duda, el informe **avisa** |
+
+### 3. El camino de un análisis
+
+1. **Crear** (`api/src/analyses/analyses.service.ts`): solo un archivo mío y `accepted`; tope de 10 con candado; la API pone la llave de los resultados y encola **solo el id** en `atalaya:analyses`.
+2. **Vista previa** (worker, `analysis_jobs.py` → `tabular.py` + `preview.py`): lee el archivo ya verificado (tamaño y SHA-256), saca columnas, ejemplos y un mapeo **sugerido** (por nombre, y por contenido para fecha e importe). Estado: `awaiting_mapping`.
+3. **Mapeo** (`PUT /analyses/{id}/mapping`): la persona confirma. La API valida la **forma** (DTO) y el **sentido** (`mapping.ts`: columnas que existan en *ese* archivo y no repetidas). Un `UPDATE … WHERE status = 'awaiting_mapping'` decide quién gana una carrera.
+4. **Limpieza** (`cleaner.py`): las reglas de abajo. Escribe el informe en la base y dos CSV en el volumen de resultados (`export.py`).
+5. **Informe y descargas** (`web/src/app/analisis/[id]/`): las cifras, los problemas con ejemplos y los dos CSV.
+
+El estado lo dice **todo**: el mensaje de la cola solo trae un id, y el worker decide qué hacer según el estado (`previewing` → vista previa; `queued` → limpiar; `running` → ya lo tomaron).
+
+### 4. Las reglas de la limpieza
+
+**Nada se descarta sin quedar contado.** Cada fila tira por **una sola razón** (la primera que falle, en este orden) y siempre se cumple `rowsKept + rowsDropped == rowsRead`.
+
+| Problema | ¿Tira la fila? | Qué es |
+|---|---|---|
+| `blank_row` | sí | Fila vacía |
+| `bad_date` / `future_date` | sí | Fecha ilegible, o del futuro |
+| `bad_amount` / `bad_quantity` | sí | No es un número razonable |
+| `duplicate_row` | sí | **Idéntica en todo lo mapeado** (un pedido con varias líneas NO es duplicado) |
+| `negative_amount` / `zero_amount` | no | Devoluciones y ceros: se conservan, con aviso |
+| `ambiguous_dates` | no | Se leyó día/mes/año por no haber pistas |
+| `text_trimmed` / `text_truncated` | no | Espacios de más; texto de más de 200 caracteres |
+
+Las fechas y los importes se leen **mirando toda la columna**: un primer número mayor que 12 prueba día/mes; `1.234,50` y `12,5` votan por la coma como decimal. La persona puede fijar cualquiera de los dos. Los importes son `Decimal`, nunca `float`, y el total sale como **texto decimal exacto** (`"110.75"`).
+
+### 5. El sanitizador: una sola función, a propósito
+
+```python
+# worker/atalaya_worker/export.py
+def safe_cell(text: str) -> str:
+    return "'" + text if text.lstrip(_IGNORED_LEADING).startswith(_DANGEROUS_START) else text
+```
+
+- Neutraliza `=`, `+`, `-`, `@`, tabulador y retorno, **también tras espacios, saltos o NBSP** (algunas hojas los ignoran).
+- Solo toca el **texto**. Los importes, cantidades y fechas salen tipados: un `-50.00` legítimo no se rompe.
+- **Vive solo en el worker, y la API únicamente entrega los archivos.** Si la API generara CSV por su cuenta habría dos implementaciones de la misma regla de seguridad, y con el tiempo discreparían.
+- **El costo, dicho claro:** Excel, al abrir un CSV, **muestra** la comilla (no la toma por marca de texto). Se prefirió un dato con una comilla de más a una fórmula que se ejecuta. La pantalla lo avisa.
+
+### 6. Recorrido
+
+| Archivo | Qué hace |
+|---|---|
+| `api/src/analyses/mapping.ts` | La regla del mapeo, pura: columnas que existan y no repetidas |
+| `api/src/analyses/analyses.service.ts` | Crear, mapear, borrar y entregar; todo filtrado por dueño en la consulta |
+| `worker/atalaya_worker/tabular.py` | Lee CSV y `.xlsx`: lo único que toca `openpyxl` (solo lectura, solo valores) |
+| `worker/atalaya_worker/values.py` | Fechas e importes tal como los escriben las personas |
+| `worker/atalaya_worker/cleaner.py` | Las reglas de la limpieza y el informe |
+| `worker/atalaya_worker/export.py` | Los dos CSV y el sanitizador anti fórmulas |
+| `worker/atalaya_worker/analysis_jobs.py` | El trabajo de punta a punta: etapas, marca de «ya empezó», cierre limpio |
+| `web/src/app/analisis/[id]/mapping-form.tsx` | El formulario de mapeo completo, con la sugerencia elegida |
+| `web/src/app/analisis/[id]/report-view.tsx` | El informe de calidad |
+
+### 7. Un worker que muere a mitad, otra vez
+
+En v0.8 se resolvía con el estado `checking`. Aquí **el contrato no tiene un estado de «trabajando en la vista previa»**, así que cada etapa pone una marca en Redis con `SET … NX EX 900`. Si el mensaje **vuelve** y la marca ya existe, la ejecución anterior murió a mitad: se cierra como `worker_timeout` y no se reabre. Usa el `set` que el worker ya tenía permitido: no hizo falta ampliar su ACL. Y el **latido va en otro hilo**: analizar 50 000 filas puede pasar de los 30 s que vale el latido y `/api/health` diría «worker caído» mientras trabaja.
+
+### 8. Lo que sigue pendiente (y por qué)
+
+- Un CSV en **latin1** (lo típico de Excel en español) se sigue rechazando.
+- De un `.xlsx` solo se lee la **primera hoja** con datos.
+- Solo se exporta a CSV, no a `.xlsx`: así hay una sola superficie de inyección.
+- S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
+- Los indicadores, el Pareto, las anomalías y el pronóstico empiezan en **v0.10**: hoy el informe dice *«qué tan limpios venían tus datos»*, no *«cómo va tu negocio»*. La limpieza se **repetirá** desde el archivo y el mapeo guardados (no se heredó un almacén intermedio).

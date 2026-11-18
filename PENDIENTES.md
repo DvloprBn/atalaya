@@ -41,4 +41,6 @@
 - ✅ Módulo de análisis en la API (crear, mapeo validado, tope con candado, exportación, retirada de CSV al borrar): 31 pruebas unitarias nuevas (236 en total) y flujo verificado en vivo con el worker simulado. Sin commit.
 - ✅ Worker de análisis (lector, vista previa, limpieza con `Decimal`, informe, CSV con sanitizador anti fórmulas): 171 pruebas de Python y 11 e2e con el worker real; falla plantada en el sanitizador detectada. Sin commit.
 - ✅ Pantallas de análisis (`/analisis`, `/analisis/[id]`, botón Analizar): 7 pruebas nuevas en Chrome real (suite completa: 27), con descarga real y un ataque XSS por encabezado de columna. Sin commit.
-- ⏳ **Falta en v0.9:** laboratorio v0.9 y capítulo de la guía; verificar el CI de GitHub (también el de v0.8, que sigue sin PR); commit, push y PR.
+- ✅ Laboratorio v0.9 (33 fichas) y capítulo v0.9 de la guía.
+- ⏳ **Falta en v0.9:** verificar el CI de GitHub (también el de v0.8, que sigue sin PR); push y PR.
+- **Pendiente sin fase asignada:** CSV en latin1 (lo típico de Excel en español; se rechaza desde v0.8 y en v0.9 no se resolvió); solo se lee la primera hoja de un `.xlsx`.
