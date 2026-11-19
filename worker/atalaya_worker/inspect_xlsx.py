@@ -39,7 +39,7 @@ def _col_number(letters: str) -> int:
     return n
 
 
-def _check_zip(zf: zipfile.ZipFile, compressed_size: int) -> None:
+def check_zip(zf: zipfile.ZipFile, compressed_size: int) -> None:
     infos = zf.infolist()
     if len(infos) > MAX_ZIP_ENTRIES:
         raise Reject("too_many_entries")
@@ -124,7 +124,7 @@ def inspect_xlsx(data: bytes) -> None:
     except zipfile.BadZipFile, ValueError:
         raise Reject("corrupt") from None
     with zf:
-        _check_zip(zf, len(data))
+        check_zip(zf, len(data))
         names = set(zf.namelist())
         if "xl/workbook.xml" not in names or "[Content_Types].xml" not in names:
             raise Reject("corrupt")

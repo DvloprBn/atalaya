@@ -15,7 +15,7 @@ SYNONYMS: dict[str, tuple[str, ...]] = {
     "quantity": ("cantidad", "cant", "qty", "quantity", "unidades", "piezas"),
     "product": ("producto", "articulo", "item", "descripcion", "product", "sku", "concepto", "categoria", "category", "rubro"),
     "branch": ("sucursal", "tienda", "branch", "store", "local", "ubicacion", "sede"),
-    "orderId": ("folio", "ticket", "orden", "pedido", "order", "factura", "transaccion", "id"),
+    "orderId": ("uuid", "folio fiscal", "folio", "ticket", "orden", "pedido", "order", "factura", "transaccion", "id"),
 }
 _CONTENT_SAMPLE = 200  # filas que se miran para adivinar por contenido (fecha / importe)
 

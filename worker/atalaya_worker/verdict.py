@@ -1,6 +1,6 @@
 """Los motivos de rechazo son una lista CERRADA (la misma del contrato y del CHECK de la base)."""
 
-REASONS = frozenset({"zip_bomb", "too_many_entries", "range_too_large", "corrupt", "empty", "worker_timeout"})
+REASONS = frozenset({"zip_bomb", "too_many_entries", "range_too_large", "corrupt", "empty", "worker_timeout", "not_cfdi"})
 
 
 class Reject(Exception):  # noqa: N818 - no es un «error»: es el resultado normal de revisar un archivo malo

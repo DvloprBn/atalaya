@@ -17,3 +17,9 @@ MAX_ABS_AMOUNT = 10**12  # un importe mayor es un error de captura, no una venta
 MAX_DECIMALS = 6
 SECONDS_PER_ANALYSIS = 60  # leer y limpiar 50 000 filas; el latido va en otro hilo, así que no caduca
 EXAMPLES_PER_ISSUE = 5
+
+# ── CFDI (v0.11) ──
+MAX_CFDI_BYTES = 1024 * 1024  # un comprobante real pesa unos KB; 1 MB ya es mucho
+MAX_XML_DEPTH = 20  # un CFDI anida unos 6 niveles
+MAX_XML_ELEMENTS = 50_000
+MAX_ATTR_CHARS = 4_000  # un atributo más largo es un ataque o un error, no un dato
