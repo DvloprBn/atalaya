@@ -105,6 +105,20 @@ jobs:
         working-directory: web
         env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1" }
         run: npm ci --no-fund && npm run test:browser
+      # Si algo falla, primero el ESTADO de cada contenedor: ¿sigue vivo?, ¿con qué código salió?, ¿lo mató la falta de
+      # memoria?, ¿cuántas veces se reinició? Lo agregó v0.12: el smoke falló con la API muda y en ninguna máquina local
+      # se pudo reproducir; sin esto, el registro no dice si la API se cayó, se reinició o se quedó sin memoria.
+      - name: Estado de los contenedores (solo si algo falló)
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a
+          for c in $(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -aq); do
+            docker inspect -f '{{.Name}} estado={{.State.Status}} salida={{.State.ExitCode}} sin_memoria={{.State.OOMKilled}} reinicios={{.RestartCount}} empezó={{.State.StartedAt}} terminó={{.State.FinishedAt}} error={{.State.Error}}' "$c"
+          done
+          free -m
+      - name: Registro completo de la API (solo si algo falló)
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --timestamps api
       - if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail 100
       - if: always()
