@@ -11,7 +11,7 @@
 
 **Fase actual:** `v0.10` **construida, verificada, comiteada y subida** en `fase/v0.10-informe` (9 commits por delante de `main`, que ya contiene v0.7, v0.8 y v0.9 desde el PR #7 con el CI 5/5). Falta: abrir el PR de v0.10 (no hay `gh`: desde la web), mirar su CI y fusionarlo. Siguiente fase: `v0.11` (CFDI XML; el ataque de la fase es XXE con `defusedxml`).
 
-**Pendiente de gestión (necesita el sí del dueño, es público):** las etiquetas **`v0.7`, `v0.8` y `v0.9` no existen** en GitHub (solo `v0.1` a `v0.6`). Candidatos: `b860fca` (v0.7), `af38a62` (v0.8) y `fc13f0a` (v0.9), o el merge `287d6ab` para las tres, que se fusionaron de una vez.
+**Etiquetas (2026-11-19, con el sí del dueño):** `v0.7` en `b860fca`, `v0.8` en `af38a62` y `v0.9` en `fc13f0a` (el último commit de cada fase, ya dentro de `main`); anotadas y subidas, con el formato de las anteriores.
 
 **Qué hay en v0.10 (verificado el 2026-11-19):**
 - **Contrato y esquema:** `kind` (ventas o gastos) y `insights` en `analyses` (migración `analysis_insights`, con CHECK: tipo cerrado, indicadores solo si terminó y solo un objeto JSON); `GET /profit` (ventas menos gastos).
@@ -33,7 +33,7 @@
 
 | Fecha | Qué |
 |---|---|
-| 2026-11-19 | v0.10 construida, verificada, comiteada (9 commits) y subida (`fase/v0.10-informe`): indicadores, Pareto, anomalías y pronóstico con su backtest, `/profit` en centavos enteros, «hoy» en la zona del negocio, gráficas con su tabla, el café ficticio (que corrigió tres defectos), laboratorio de 32 fichas y capítulo v0.10. `main` ya tenía v0.7, v0.8 y v0.9 (PR #7, CI 5/5); faltan sus etiquetas. Sin PR de v0.10 todavía. |
+| 2026-11-19 | v0.10 construida, verificada, comiteada (9 commits) y subida (`fase/v0.10-informe`): indicadores, Pareto, anomalías y pronóstico con su backtest, `/profit` en centavos enteros, «hoy» en la zona del negocio, gráficas con su tabla, el café ficticio (que corrigió tres defectos), laboratorio de 32 fichas y capítulo v0.10. `main` ya tenía v0.7, v0.8 y v0.9 (PR #7, CI 5/5); se les pusieron sus etiquetas. Sin PR de v0.10 todavía. |
 | 2026-11-18 | v0.9 construida, verificada, comiteada (3 commits) y subida (`fase/v0.9-analisis`): análisis de ventas en dos pasos, worker con `openpyxl`, limpieza con reglas cerradas y `Decimal`, exportación con sanitizador anti fórmulas, pantallas, laboratorio de 33 fichas y capítulo v0.9. Sin PR ni CI. Pendiente sin resolver: v0.7 no aparece fusionada en GitHub. |
 | 2026-11-18 | v0.8 construida, verificada, comiteada y subida (`fase/v0.8-subida`): subida segura, cola, worker con rol de base y usuario de Redis mínimos, pantallas de archivos, laboratorio de 19 fichas, capítulo v0.8 y `permisos-worker.sh`. Anotado S-15. Sin PR ni CI todavía. |
 | 2026-11-18 | v0.7 construida, verificada y comiteada en su rama: bitácora de seguridad y auditoría, aviso de robo de sesión, recolector CSP y panel «Seguridad del sistema»; laboratorio de 12 fichas y capítulo v0.7. |
