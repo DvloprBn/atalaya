@@ -3,7 +3,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import type { components } from '@/lib/api-schema';
-import { api, type PublicUser } from '@/lib/browser-api';
+import { api } from '@/lib/browser-api';
+import { SessionProblem, useMe } from '@/lib/use-me';
 import { AuditTable } from './audit-table';
 import { DaySummary } from './day-summary';
 import { EventsTable } from './events-table';
@@ -14,21 +15,20 @@ const ADMIN_LEVEL = 3;
 // y qué se oculta lo decide la API. El nivel que se comprueba aquí es solo para no mostrar una pantalla vacía.
 export default function SecurityPage() {
   const router = useRouter();
-  const [me, setMe] = useState<PublicUser | null>(null);
+  const { user: me, failed, retry } = useMe();
   const [summary, setSummary] = useState<components['schemas']['SecuritySummary'] | null>(null);
 
   useEffect(() => {
+    if (!me) return;
+    if (me.role.level < ADMIN_LEVEL) return router.replace('/cuenta');
     void (async () => {
-      const who = await api.get<PublicUser>('/api/auth/me');
-      if (!who.ok || !who.data) return router.replace('/login');
-      if (who.data.role.level < ADMIN_LEVEL) return router.replace('/cuenta');
-      setMe(who.data);
       const res = await api.get<components['schemas']['SecuritySummary']>('/api/admin/security/summary');
       if (res.ok && res.data) setSummary(res.data);
     })();
-  }, []);
+  }, [me, router]);
 
-  if (!me) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
+  if (failed) return <SessionProblem onRetry={retry} />;
+  if (!me || me.role.level < ADMIN_LEVEL) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (
     <AppShell user={me}>

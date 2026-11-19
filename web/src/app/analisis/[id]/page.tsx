@@ -3,10 +3,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { ANALYSIS_STATUS, FAIL_LABELS, isWorking, KIND_LABELS } from '@/lib/analysis-view';
-import { type Analysis, api, type PublicUser } from '@/lib/browser-api';
+import { type Analysis, api } from '@/lib/browser-api';
 import { InsightsView } from './insights-view';
 import { MappingForm } from './mapping-form';
 import { ReportView } from './report-view';
+import { SessionProblem, useMe } from '@/lib/use-me';
 
 const pollDelay = (tries: number) => Math.min(2000 * 1.5 ** tries, 8000); // retroceso: ver «Mis archivos»
 
@@ -14,7 +15,7 @@ const pollDelay = (tries: number) => Math.min(2000 * 1.5 ** tries, 8000); // ret
 export default function AnalysisPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const { user, failed, retry } = useMe();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [missing, setMissing] = useState(false);
   const [tries, setTries] = useState(0);
@@ -25,12 +26,6 @@ export default function AnalysisPage() {
     else if (res.status === 404) setMissing(true);
   }, [id]);
 
-  useEffect(() => {
-    void api.get<PublicUser>('/api/auth/me').then((res) => {
-      if (res.ok && res.data) setUser(res.data);
-      else router.replace('/login');
-    });
-  }, [router]);
   useEffect(() => {
     if (user) void load();
   }, [user, load]);
@@ -51,6 +46,7 @@ export default function AnalysisPage() {
     router.push('/analisis');
   }
 
+  if (failed) return <SessionProblem onRetry={retry} />;
   if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
   return (
     <AppShell user={user}>

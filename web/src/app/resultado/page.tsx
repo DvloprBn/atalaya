@@ -1,12 +1,12 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { ColumnChart } from '@/components/column-chart';
 import { monthLabel, money } from '@/lib/analysis-view';
 import type { components } from '@/lib/api-schema';
-import { type AnalysisPage, api, type PublicUser, type UploadPage } from '@/lib/browser-api';
+import { type AnalysisPage, api, type UploadPage } from '@/lib/browser-api';
 import styles from '../analisis/analisis.module.css';
+import { SessionProblem, useMe } from '@/lib/use-me';
 
 type Profit = components['schemas']['Profit'];
 type Choice = { id: string; name: string };
@@ -14,8 +14,7 @@ type Choice = { id: string; name: string };
 // Ventas menos gastos. La resta la hace la API con centavos enteros (nunca con números de punto flotante): esta pantalla
 // solo muestra los textos exactos que ella devuelve. La protección REAL es la API: un análisis ajeno responde 404.
 export default function ProfitPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const { user, failed, retry } = useMe();
   const [sales, setSales] = useState<Choice[]>([]);
   const [expenses, setExpenses] = useState<Choice[]>([]);
   const [pickSales, setPickSales] = useState('');
@@ -25,10 +24,8 @@ export default function ProfitPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
     void (async () => {
-      const me = await api.get<PublicUser>('/api/auth/me');
-      if (!me.ok || !me.data) return router.replace('/login');
-      setUser(me.data);
       const [analyses, uploads] = await Promise.all([api.get<AnalysisPage>('/api/analyses'), api.get<UploadPage>('/api/uploads')]);
       const names = new Map((uploads.data?.items ?? []).map((u) => [u.id, u.displayName ?? 'sin nombre']));
       // Solo los terminados y con indicadores (los de antes de v0.10 no los tienen: la API los rechazaría con 409).
@@ -37,7 +34,7 @@ export default function ProfitPage() {
       setSales(ready.filter((a) => a.kind === 'sales').map(choice));
       setExpenses(ready.filter((a) => a.kind === 'expenses').map(choice));
     })();
-  }, [router]);
+  }, [user]);
 
   async function show() {
     if (!pickSales || !pickExpenses || busy) return;
@@ -50,6 +47,7 @@ export default function ProfitPage() {
     setError(res.message ?? 'No se pudo calcular el resultado.');
   }
 
+  if (failed) return <SessionProblem onRetry={retry} />;
   if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
   const missing = sales.length === 0 || expenses.length === 0;
   const loss = (text: string) => text.startsWith('-');
