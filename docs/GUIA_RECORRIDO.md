@@ -2,7 +2,7 @@
 
 > Una sola guía, en orden. Cada fase agrega su capítulo al final. Léela con el código abierto al lado: cada paso nombra el archivo exacto.
 >
-> **Capítulo actual: v0.9, el análisis de ventas.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
+> **Capítulo actual: v0.10, el informe de ventas y gastos.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
 
 ---
 
@@ -759,4 +759,97 @@ En v0.8 se resolvía con el estado `checking`. Aquí **el contrato no tiene un e
 - De un `.xlsx` solo se lee la **primera hoja** con datos.
 - Solo se exporta a CSV, no a `.xlsx`: así hay una sola superficie de inyección.
 - S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
-- Los indicadores, el Pareto, las anomalías y el pronóstico empiezan en **v0.10**: hoy el informe dice *«qué tan limpios venían tus datos»*, no *«cómo va tu negocio»*. La limpieza se **repetirá** desde el archivo y el mapeo guardados (no se heredó un almacén intermedio).
+- Los indicadores, el Pareto, las anomalías y el pronóstico empiezan en **v0.10**: hoy el informe dice *«qué tan limpios venían tus datos»*, no *«cómo va tu negocio»*. *(Se hizo en v0.10, y de otra manera: los indicadores se calculan al final de la misma etapa de limpieza, con las filas ya limpias en memoria; no se repite la lectura del archivo.)*
+
+---
+
+## Capítulo v0.10: cuando el número miente sin que nadie mienta
+
+> Lo nuevo: los **indicadores** de un análisis terminado (resumen, mes a mes, días de la semana, Pareto, anomalías y pronóstico con su error medido), el tipo **ventas o gastos**, la vista **Resultado** (ventas menos gastos) y las gráficas. Ataques y defensas en [`laboratorio/v0.10-informe.md`](laboratorio/v0.10-informe.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # kind e insights en analyses (y el permiso del worker)
+python3 scripts/generar_cafe.py                      # el café ficticio: 3 sucursales, 2 años, ventas y gastos
+./scripts/permisos-worker.sh                         # el worker solo puede lo que debe (42 comprobaciones)
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`). En **Mis archivos** sube `datos-ejemplo/cafe-ventas.csv` y `cafe-gastos.csv`; pulsa **Analizar ventas** en uno y **Analizar gastos** en el otro. Cuando terminen, abre **Resultado**, elige los dos y mira qué quedó cada mes. Prueba también `cafe-ventas-sucio.csv` para ver el informe de calidad con suciedad sembrada.
+
+### 2. La idea: un indicador debe decir cuánto fiarse de él
+
+Hasta v0.9 las defensas eran contra alguien que ataca. Aquí nadie ataca: un total pierde un centavo, «hoy» cae en mañana, una anomalía es en realidad la tendencia, un pronóstico se presenta sin su error. Son fallas de **exactitud** y de **honestidad**, y de cada una sale una regla:
+
+| Regla | Qué evita |
+|---|---|
+| El dinero es **exacto de punta a punta**: `Decimal` en el worker, centavos enteros en la API, texto en el navegador | Un total que pierde un centavo (`0.1 + 0.2`) o dígitos con cifras grandes |
+| «**Hoy**» es el de la zona del negocio (`America/Mexico_City`), no el UTC del contenedor | Una venta de hoy descartada como futura de 18:00 a 24:00 |
+| Lo que no se puede analizar **se dice** (`insufficient_data`), no se inventa | Anomalías en gastos espaciados; pronósticos sobre casi puros ceros |
+| Todo pronóstico trae **su error medido** (el backtest) | Una promesa sin su margen |
+| La gráfica **nunca va sola**: lleva su tabla y no usa el color como único canal | Quien no ve colores o no usa ratón se queda sin la información |
+
+### 3. El camino de los números
+
+1. **La limpieza** (v0.9, `cleaner.py`) deja las filas válidas y el informe de calidad.
+2. **Los indicadores** (`worker/atalaya_worker/insights.py`) se calculan **en la misma etapa**, con esas filas ya en memoria, y se guardan **junto con el informe en una sola sentencia** (`status = 'done'` + `report` + `insights`): un análisis no está «terminado» sin los dos. Un análisis de v0.9 no los tiene y la pantalla lo dice.
+3. **La API** los entrega dentro del análisis y calcula el **resultado** (`GET /profit`) restando dos series mensuales con enteros de centavos (`money.ts`).
+4. **La pantalla** los dibuja (`web/src/app/analisis/[id]/insights-view.tsx` y `web/src/app/resultado/page.tsx`).
+
+### 4. Qué calcula cada indicador
+
+| Indicador | Cómo | Ojo |
+|---|---|---|
+| Neto, bruto, devoluciones | Suma de todos los importes, de los positivos y de los negativos | El neto es **igual** al `totalAmount` del informe de calidad (una prueba lo exige) |
+| Mes a mes | Neto por mes, con el cambio contra el mes anterior **con datos** | El primer y el último mes pueden estar incompletos: se avisa |
+| Días de la semana | Promedio del total diario de cada día de la semana | Sobre los días que tienen datos |
+| Pareto | Neto por elemento, los 20 mayores, % y % acumulado; clase A hasta el 80 %, B hasta el 95 %, C el resto | El que **cruza** el 80 % sigue siendo A; el acumulado se calcula sobre el valor exacto |
+| Anomalías | Cada día contra el **mismo día de la semana de las 5 semanas de cada lado**; puntaje robusto con MAD, umbral 3,5 | Absorbe tendencia y temporada; con menos del 60 % de los días con datos, dice `insufficient_data` |
+| Pronóstico | Promedio de las últimas 8 veces que cayó ese día de la semana, 14 días, con intervalo ±1,28 desviaciones | **Es un punto de partida, no un modelo**; trae su backtest (WAPE) |
+
+### 5. Por qué el café encontró lo que mis pruebas no
+
+Las primeras pruebas usaban un negocio sintético perfectamente regular, y pasaron todas. Al pasar por Atalaya los **730 días del café** (que crece 1,25 % al mes, con temporada y siete eventos sembrados) aparecieron tres defectos:
+
+1. **Falsos positivos por tendencia.** El baseline era la mediana de *todos* los sábados: los de hace dos años, cuando el negocio era más chico, salían «bajos». De 10 anomalías, 5 eran falsas y dos eventos sembrados quedaban fuera. Con el baseline local: **7 de 7** eventos y 1 falso positivo.
+2. **Gastos analizados por día de la semana.** La nómina del 15 salía como «anomalía». Ahora, con menos del 60 % de los días con datos, se dice que no hay suficientes.
+3. **El Pareto de gastos salía vacío:** «categoría» no se reconocía como el elemento.
+
+Los **totales coincidieron al centavo** con lo que el generador anotó (ventas 18 081 166.00 y gastos 12 885 026.79), y el resultado fue 5 196 139.21. La lección está en el laboratorio: un dato de prueba debe parecerse a los reales, o mide otra cosa.
+
+### 6. Las gráficas
+
+Hechas a mano en SVG (sin librería), con las reglas de la guía de visualización:
+
+- **Una serie y un eje que arranca en cero.** Nunca dos ejes.
+- **Barras delgadas** (máximo 24 px), con el extremo de datos redondeado y la base recta; cuadrícula de un pixel.
+- **El valor solo en la barra extrema**, no uno por barra; el resto, en el tooltip y en la tabla.
+- **Toda gráfica lleva su tabla equivalente** y un nombre accesible. El color (ámbar) nunca es el único canal: siempre hay una palabra al lado («pérdida», «más alto»).
+- **Los colores se validaron con el script de la guía**, no a ojo: los del sitio fallaban la banda de luminosidad para marcas sobre fondo oscuro, y se definieron variantes más oscuras (`--chart-main`, `--chart-alert`) solo para las marcas.
+- **En el teléfono** la gráfica conserva un ancho legible y se desplaza, y una serie de tiempo arranca al final (lo reciente).
+
+### 7. Recorrido
+
+| Archivo | Qué hace |
+|---|---|
+| `worker/atalaya_worker/tz.py` | «Hoy» en la zona del negocio; rechaza una hora sin zona |
+| `worker/atalaya_worker/quant.py` | Del `Decimal` exacto al texto del contrato: se redondea una sola vez |
+| `worker/atalaya_worker/indicators.py`, `pareto.py`, `anomalies.py`, `forecast.py` | Un cálculo por archivo |
+| `worker/atalaya_worker/insights.py` | Los junta |
+| `api/src/analyses/money.ts` | Dinero en centavos enteros (`BigInt`) |
+| `api/src/analyses/profit.service.ts` | Ventas menos gastos, mes por mes |
+| `web/src/components/column-chart.tsx`, `line-chart.tsx` | Las dos gráficas |
+| `web/src/app/analisis/[id]/insights-view.tsx` | El informe de indicadores |
+| `web/src/app/resultado/page.tsx` | La vista de resultado |
+| `scripts/generar_cafe.py` | El café ficticio (determinista) |
+
+### 8. Lo que sigue pendiente (y por qué)
+
+- El pico de un día **contamina** el promedio de su día de la semana en el pronóstico (el método no lo filtra); no hay tendencia, feriados ni promociones.
+- En las primeras y últimas 5 semanas de una serie solo hay vecinos de un lado, y con una tendencia fuerte las anomalías pueden equivocarse.
+- Los **gastos** no tienen pronóstico ni anomalías (se dice); una versión mensual sería otra fase.
+- Los indicadores **no se exportan** a CSV, a propósito: los nombres de producto y de sucursal son texto del archivo y abrirían otra superficie de inyección de fórmulas.
+- Un CSV en **latin1** sigue rechazándose; de un `.xlsx` solo se lee la primera hoja.
+- S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
+- Siguen sin probarse un Excel o LibreOffice reales y datos de un negocio real; el café es sintético.
