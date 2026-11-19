@@ -44,3 +44,8 @@
 - ✅ Laboratorio v0.9 (33 fichas) y capítulo v0.9 de la guía.
 - ⏳ **Falta en v0.9:** verificar el CI de GitHub (también el de v0.8, que sigue sin PR); push y PR.
 - **Pendiente sin fase asignada:** CSV en latin1 (lo típico de Excel en español; se rechaza desde v0.8 y en v0.9 no se resolvió); solo se lee la primera hoja de un `.xlsx`.
+
+## Siguiente fase (v0.10) — avance 2026-11-19
+- ✅ Contrato (`kind`, `insights`, `GET /profit`), migración `analysis_insights` con sus CHECK y el permiso del worker, `permisos-worker.sh` ampliado (42 comprobaciones). Sin commit.
+- ⏳ **Falta en v0.10:** API (`kind` al crear, `insights` en la vista, `GET /profit` con aritmética de centavos en `BigInt`); worker (`tzdata`, «hoy» en `America/Mexico_City` también para v0.9, indicadores, Pareto, anomalías, pronóstico con su backtest); pantallas (informe con gráficas y su tabla equivalente, y la vista de resultado ventas menos gastos); pruebas de ataque (dinero en `Decimal`, zona horaria, IDOR del resultado); laboratorio y capítulo; PR.
+- **Pendientes de gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` (con permiso del dueño); `ESTADO_PROYECTO.md` desactualizado (al cerrar v0.10).

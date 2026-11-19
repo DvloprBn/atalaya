@@ -276,6 +276,8 @@ model Analysis {
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   uploadId   String   @map("upload_id") @db.Uuid
   upload     Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  /// Qué contiene el archivo: sales | expenses. Se elige al crear y no cambia. (CHECK en la base.)
+  kind       String   @default("sales") @db.VarChar(8)
   /// previewing | awaiting_mapping | queued | running | done | failed
   status     String   @default("previewing") @db.VarChar(16)
   /// Solo cuando status = failed; lista cerrada (CHECK).
@@ -286,6 +288,9 @@ model Analysis {
   mapping    Json?    @db.JsonB
   /// El informe de calidad (lo escribe el worker, solo al terminar bien).
   report     Json?    @db.JsonB
+  /// Indicadores, Pareto, anomalías y pronóstico (lo escribe el worker, junto con el informe y solo al terminar bien).
+  /// null en los análisis anteriores a v0.10: no hay «recalcular», se vuelven a crear.
+  insights   Json?    @db.JsonB
   /// Nombre base (32 hex, lo genera la API) de los archivos de resultados: <llave>.clean.csv y <llave>.report.csv.
   resultKey  String   @unique @map("result_key") @db.Char(32)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
