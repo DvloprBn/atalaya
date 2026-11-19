@@ -2,8 +2,9 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { ANALYSIS_STATUS, FAIL_LABELS, isWorking } from '@/lib/analysis-view';
+import { ANALYSIS_STATUS, FAIL_LABELS, isWorking, KIND_LABELS } from '@/lib/analysis-view';
 import { type Analysis, api, type PublicUser } from '@/lib/browser-api';
+import { InsightsView } from './insights-view';
 import { MappingForm } from './mapping-form';
 import { ReportView } from './report-view';
 
@@ -54,7 +55,7 @@ export default function AnalysisPage() {
   return (
     <AppShell user={user}>
       <p><a href="/analisis">← Mis análisis</a></p>
-      <h1>Análisis</h1>
+      <h1>{analysis ? `Análisis de ${KIND_LABELS[analysis.kind]}` : 'Análisis'}</h1>
       {missing && <p role="alert">Este análisis no existe.</p>}
       {analysis && (
         <>
@@ -78,9 +79,17 @@ export default function AnalysisPage() {
             </section>
           )}
           {analysis.status === 'awaiting_mapping' && analysis.preview && (
-            <MappingForm analysisId={analysis.id} preview={analysis.preview} onSaved={setAnalysis} />
+            <MappingForm analysisId={analysis.id} kind={analysis.kind} preview={analysis.preview} onSaved={setAnalysis} />
           )}
           {analysis.status === 'done' && analysis.report && <ReportView analysisId={analysis.id} report={analysis.report} />}
+          {analysis.status === 'done' && analysis.insights && <InsightsView kind={analysis.kind} insights={analysis.insights} period={{ from: analysis.report?.dateFrom ?? null, to: analysis.report?.dateTo ?? null }} />}
+          {analysis.status === 'done' && !analysis.insights && (
+            <section className="card stack">
+              <p className="muted">
+                Este análisis es anterior a los indicadores (Pareto, anomalías y pronóstico). Bórralo y vuelve a crearlo desde «Mis análisis» para tenerlos.
+              </p>
+            </section>
+          )}
         </>
       )}
     </AppShell>

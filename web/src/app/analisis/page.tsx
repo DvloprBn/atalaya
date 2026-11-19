@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { ANALYSIS_STATUS, isWorking } from '@/lib/analysis-view';
+import { ANALYSIS_STATUS, isWorking, KIND_LABELS } from '@/lib/analysis-view';
 import { type Analysis, type AnalysisPage, api, type PublicUser, type UploadPage } from '@/lib/browser-api';
 import { when } from '@/lib/upload-view';
 import { Pager } from '../admin/seguridad/pager';
@@ -18,6 +18,7 @@ export default function AnalysesPage() {
   const [accepted, setAccepted] = useState<UploadPage['items']>([]);
   const [page, setPage] = useState(1);
   const [pick, setPick] = useState('');
+  const [kind, setKind] = useState<Analysis['kind']>('sales');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [tries, setTries] = useState(0);
@@ -52,7 +53,7 @@ export default function AnalysesPage() {
     if (!pick || busy) return;
     setBusy(true);
     setError('');
-    const res = await api.post<Analysis>('/api/analyses', { uploadId: pick });
+    const res = await api.post<Analysis>('/api/analyses', { uploadId: pick, kind });
     setBusy(false);
     if (res.ok && res.data) return router.push(`/analisis/${res.data.id}`);
     setError(res.message ?? 'No se pudo empezar el análisis.');
@@ -87,6 +88,13 @@ export default function AnalysesPage() {
                 ))}
               </select>
             </label>
+            <label>
+              Qué contiene
+              <select value={kind} onChange={(e) => setKind(e.target.value as Analysis['kind'])}>
+                <option value="sales">Ventas (lo que entra)</option>
+                <option value="expenses">Gastos (lo que sale)</option>
+              </select>
+            </label>
             <button onClick={start} disabled={!pick || busy} style={{ alignSelf: 'flex-end' }}>
               {busy ? 'Empezando…' : 'Empezar'}
             </button>
@@ -104,6 +112,7 @@ export default function AnalysesPage() {
               <thead>
                 <tr>
                   <th scope="col">Archivo</th>
+                  <th scope="col">Tipo</th>
                   <th scope="col">Estado</th>
                   <th scope="col">Empezó</th>
                   <th scope="col"><span className="sr-only">Abrir</span></th>
@@ -115,6 +124,7 @@ export default function AnalysesPage() {
                     <td style={{ overflowWrap: 'anywhere' }}>
                       {names.get(a.uploadId) ?? <span className="muted">archivo no disponible</span>}
                     </td>
+                    <td>{KIND_LABELS[a.kind]}</td>
                     <td>
                       <span className="chip" data-state={a.status === 'done' ? 'ok' : a.status === 'failed' ? 'down' : undefined}>
                         {ANALYSIS_STATUS[a.status]}

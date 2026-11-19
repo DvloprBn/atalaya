@@ -1,6 +1,6 @@
 'use client';
 import { type FormEvent, useState } from 'react';
-import { duplicateColumn, FIELDS, type MappingField } from '@/lib/analysis-view';
+import { duplicateColumn, FIELDS, fieldLabel, type MappingField } from '@/lib/analysis-view';
 import { type Analysis, type AnalysisMapping, api } from '@/lib/browser-api';
 import styles from '../analisis.module.css';
 
@@ -13,7 +13,7 @@ type Separator = NonNullable<AnalysisMapping['decimalSeparator']>;
  * obligatorios, el resto opcional, y las dos opciones de formato), con la sugerencia del worker ya elegida.
  * Los nombres y ejemplos son TEXTO DEL ARCHIVO: React los escapa, nunca se pintan como HTML.
  */
-export function MappingForm({ analysisId, preview, onSaved }: { analysisId: string; preview: Preview; onSaved: (a: Analysis) => void }) {
+export function MappingForm({ analysisId, kind, preview, onSaved }: { analysisId: string; kind: Analysis['kind']; preview: Preview; onSaved: (a: Analysis) => void }) {
   const [choice, setChoice] = useState<Record<MappingField, string>>(() =>
     Object.fromEntries(FIELDS.map((f) => [f.key, String(preview.suggested[f.key] ?? '')])) as Record<MappingField, string>,
   );
@@ -29,7 +29,7 @@ export function MappingForm({ analysisId, preview, onSaved }: { analysisId: stri
     for (const { key } of FIELDS) if (choice[key] !== '') mapping[key] = Number(choice[key]);
     // Revisión de cortesía; la API vuelve a validar contra la vista previa de este archivo.
     if (mapping.date === undefined || mapping.amount === undefined) return setError('Elige la columna de la fecha y la del importe.');
-    const duplicated = duplicateColumn(mapping);
+    const duplicated = duplicateColumn(mapping, kind);
     if (duplicated) return setError(duplicated);
 
     setError('');
@@ -53,7 +53,7 @@ export function MappingForm({ analysisId, preview, onSaved }: { analysisId: stri
           <legend>Columnas</legend>
           {FIELDS.map((f) => (
             <label key={f.key}>
-              {f.label}
+              {fieldLabel(kind, f.key)}
               {f.required ? ' (obligatorio)' : ''}
               <select value={choice[f.key]} onChange={(e) => setChoice({ ...choice, [f.key]: e.target.value })} aria-required={f.required}>
                 {!f.required && <option value="">— no usar —</option>}

@@ -1,0 +1,26 @@
+.frame { overflow-x: auto; } /* en un teléfono la gráfica conserva un ancho legible y se desplaza, en vez de encoger sus textos a 6 px */
+.canvas { position: relative; } /* su ancho mínimo lo pone cada gráfica según cuántas barras tiene */
+.svg { width: 100%; height: auto; display: block; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.zero { stroke: var(--line-strong); stroke-width: 1; }
+.tick { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.value { fill: var(--text); font-family: var(--font-mono); font-size: 12px; }
+.bar { fill: var(--chart-main); }
+.bar[data-alert='true'] { fill: var(--chart-alert); }
+.hit { fill: transparent; }
+.hit:hover { fill: rgba(230, 236, 245, 0.05); } /* una banda más ancha que la barra: se acierta sin puntería */
+
+.band { fill: var(--chart-main); opacity: 0.18; }
+.line { fill: none; stroke: var(--chart-main); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.dot { fill: var(--chart-main); stroke: var(--surface); stroke-width: 2; } /* anillo del color de la superficie */
+.cross { stroke: var(--faint); stroke-width: 1; }
+
+.tooltip {
+  position: absolute; top: 4px; transform: translateX(-50%); pointer-events: none; z-index: 2;
+  background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; line-height: 1.35; white-space: nowrap; color: var(--text);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--chart-main); }
+.swatch[data-alert='true'] { background: var(--chart-alert); }
