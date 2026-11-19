@@ -28,36 +28,23 @@
 |---|---|---|---|
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
-## Siguiente fase (v0.8) — avance 2026-11-18
-- ✅ Contrato, tabla `uploads` y módulo de subida en la API (19 pruebas e2e de ataque y 20 unitarias nuevas).
-- ✅ Pantalla de archivos (`/archivos` y `/admin/archivos`): 6 pruebas nuevas en Chrome real (suite completa: 20).
-- ✅ Worker (revisión profunda, rol de base y usuario de Redis mínimos): 37 pruebas de Python y 11 e2e de archivos hostiles; recuperación de un worker caído probada en vivo.
-- ✅ Laboratorio v0.8 (19 fichas) y capítulo v0.8 de la guía; `scripts/permisos-worker.sh` (21 rechazos y 4 permisos reales, con falla plantada) y su paso en el CI.
-- ⏳ **Falta en v0.8:** verificar el CI de GitHub con las dos contraseñas nuevas y el script de permisos; PR, CI y etiqueta (después de fusionar v0.7).
-- Idea para el panel: avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo).
+## Datos y negocio
 
-## Siguiente fase (v0.9) — avance 2026-11-18
-- ✅ Contrato (4 rutas), tabla `analyses` con sus CHECK y permisos del worker, volumen `results_data`, stream en el ACL de Redis, `permisos-worker.sh` ampliado (37 comprobaciones). Sin commit.
-- ✅ Módulo de análisis en la API (crear, mapeo validado, tope con candado, exportación, retirada de CSV al borrar): 31 pruebas unitarias nuevas (236 en total) y flujo verificado en vivo con el worker simulado. Sin commit.
-- ✅ Worker de análisis (lector, vista previa, limpieza con `Decimal`, informe, CSV con sanitizador anti fórmulas): 171 pruebas de Python y 11 e2e con el worker real; falla plantada en el sanitizador detectada. Sin commit.
-- ✅ Pantallas de análisis (`/analisis`, `/analisis/[id]`, botón Analizar): 7 pruebas nuevas en Chrome real (suite completa: 27), con descarga real y un ataque XSS por encabezado de columna. Sin commit.
-- ✅ Laboratorio v0.9 (33 fichas) y capítulo v0.9 de la guía.
-- ⏳ **Falta en v0.9:** verificar el CI de GitHub (también el de v0.8, que sigue sin PR); push y PR.
-- **Pendiente sin fase asignada:** CSV en latin1 (lo típico de Excel en español; se rechaza desde v0.8 y en v0.9 no se resolvió); solo se lee la primera hoja de un `.xlsx`.
+| Id | Qué | Quién | Cuándo |
+|---|---|---|---|
+| D-1 | CSV en latin1 (lo típico de Excel en español): se rechaza desde v0.8. | Claude | Sin fase asignada |
+| D-2 | De un `.xlsx` solo se lee la primera hoja. | Claude | Sin fase asignada |
+| D-3 | Excel o LibreOffice reales y datos de un negocio real sin probar. Candidato: Online Retail II de UCI (CC BY 4.0); descargarlo requiere el permiso del dueño. | Dueño (permiso) · Claude | Antes de v1.0 |
 
-## Siguiente fase (v0.10) — avance 2026-11-19
-- ✅ Contrato (`kind`, `insights`, `GET /profit`), migración `analysis_insights` con sus CHECK y el permiso del worker, `permisos-worker.sh` ampliado (42 comprobaciones). Sin commit.
-- ✅ API: `kind` al crear, `kind` e `insights` en la vista y `GET /profit` con centavos en `BigInt` (33 pruebas unitarias nuevas, 269 en total; e2e 111). Sin commit.
-- ✅ Worker de indicadores (zona horaria, indicadores, Pareto, anomalías, pronóstico con su backtest), conformidad con el contrato como prueba y 3 e2e con el worker real; el tope general escala con `THROTTLE_SCALE`. Worker 234 pruebas. Datos de ejemplo del café ficticio (`scripts/generar_cafe.py`): su prueba de punta a punta corrigió tres defectos (baseline de anomalías, gastos espaciados, sinónimo de «categoría»). Sin commit.
-- ✅ Pantallas de v0.10 (informe con gráficas y su tabla, `/resultado`, tipo ventas o gastos): 5 pruebas nuevas en Chrome real (suite completa: 32). Sin commit.
-- ✅ Laboratorio v0.10 (32 fichas) y capítulo v0.10 de la guía.
-- ⏳ **Falta en v0.10:** reescribir `ESTADO_PROYECTO.md`; subir la rama, PR y CI (primera vez con `openpyxl`, el café y el tope general escalable en GitHub).
-- **Gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` puestas el 2026-11-19; `ESTADO_PROYECTO.md` al día.
+## Pruebas
 
-## Siguiente fase (v0.11) — avance 2026-11-18
-- ✅ Contrato, migración `cfdi_kinds` y puerta de la API (`.xml` y `.zip` por firma). Comiteado.
-- ✅ Worker de CFDI: lector seguro, ZIP, tabla virtual, descartes contados, revisión profunda; 312 pruebas con el catálogo XXE. Comiteado.
-- ✅ e2e de CFDI contra el worker real (7: ZIP con cifras exactas, `.xml` suelto, XXE en `.xml` y dentro de ZIP, billion laughs, entradas malas, 501 entradas). Comiteado en el cierre.
-- ✅ Pantalla, generador de CFDI sintéticos, laboratorio y capítulo (2026-11-19, sin comitear).
-- ✅ PR #9 fusionado y etiqueta `v0.11` puesta (2026-11-19). v0.11 cerrada.
-- **Gestión:** `main` contiene v0.10; etiquetas `v0.1`–`v0.10` puestas.
+| Id | Qué | Quién | Cuándo |
+|---|---|---|---|
+| P-1 | Una vez, 3 pruebas de `twofactor` fallaron en una corrida partida en dos y no reproduce. Sin explicar. | Claude | Si vuelve a salir |
+
+## Ideas sin fecha
+- Avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo). Claude.
+
+## Cerrados
+- ~~Bloques de avance «Siguiente fase» de v0.8, v0.9, v0.10 y v0.11~~ (2026-11-19): todo lo que decían está hecho y fusionado; el texto íntegro está en `docs/historial/PENDIENTES_COMPLETOS_2026-11-19.md`, líneas 33-64 (v0.8: 33-40, v0.9: 41-49, v0.10: 50-58, v0.11: 59-64).
+- Etiquetas `v0.1` a `v0.11` puestas; `main` contiene hasta v0.11 y S-15.
