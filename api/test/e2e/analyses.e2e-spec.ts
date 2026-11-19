@@ -275,6 +275,36 @@ describe('v0.9 · análisis (sistema vivo, worker real)', () => {
     expect((await user.get('/api/analyses')).body.total).toBe(0);
   });
 
+  it('v0.10 · tipo de análisis: ventas por omisión, gastos si se pide, y un tipo inventado es 400', async () => {
+    const up = await upload(csv('fecha,total', '2026-01-01,10'), 'tipos.csv');
+    const sales = await user.post('/api/analyses', { uploadId: up });
+    const expenses = await user.post('/api/analyses', { uploadId: up, kind: 'expenses' });
+    expect([sales.body.kind, expenses.body.kind]).toEqual(['sales', 'expenses']);
+    expect(sales.body.insights).toBeNull(); // los indicadores solo existen con el análisis terminado
+    expect((await user.post('/api/analyses', { uploadId: up, kind: 'ingresos' })).status).toBe(400);
+    expect((await user.get(`/api/analyses/${expenses.body.id}`)).body.kind).toBe('expenses'); // y se conserva
+  });
+
+  it('v0.10 · /profit (ventas menos gastos): validaciones y control de acceso', async () => {
+    const up = await upload(csv('fecha,total', '2026-01-01,10'), 'resultado.csv');
+    const sales = (await user.post('/api/analyses', { uploadId: up })).body.id;
+    const expenses = (await user.post('/api/analyses', { uploadId: up, kind: 'expenses' })).body.id;
+    const url = (a: string, b: string) => `/api/profit?sales=${a}&expenses=${b}`;
+    expect((await new Browser().get(url(sales, expenses))).status).toBe(401);
+    expect((await user.get('/api/profit')).status).toBe(400); // faltan los dos
+    expect((await user.get(url('x', 'y'))).status).toBe(400); // no son UUID
+    expect((await user.get(`${url(sales, expenses)}&extra=1`)).status).toBe(400); // campo de más
+    expect((await user.get(url(expenses, sales))).status).toBe(400); // al revés
+    expect((await user.get(url(sales, sales))).status).toBe(400); // el mismo dos veces
+    expect((await user.get(url(sales, expenses))).status).toBe(409); // todavía sin terminar
+    // Lo ajeno y lo inexistente dan el MISMO 404, también para un admin, sin decir cuál de los dos falló.
+    const ghost = '00000000-0000-4000-8000-000000000000';
+    const admin = await loginAs('admin');
+    const answers = await Promise.all([other.get(url(sales, expenses)), admin.get(url(sales, expenses)), user.get(url(sales, ghost)), user.get(url(ghost, expenses))]);
+    expect(answers.map((r) => r.status)).toEqual([404, 404, 404, 404]);
+    expect(new Set(answers.map((r) => JSON.stringify(r.body))).size).toBe(1);
+  });
+
   it('un archivo que aún no está aceptado no se puede analizar (409)', async () => {
     const f = new FormData();
     f.append('file', new File([new Uint8Array(Buffer.from('fecha,total\n'))], 'solo-encabezado.csv')); // el worker lo rechaza: vacío

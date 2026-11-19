@@ -47,5 +47,6 @@
 
 ## Siguiente fase (v0.10) — avance 2026-11-19
 - ✅ Contrato (`kind`, `insights`, `GET /profit`), migración `analysis_insights` con sus CHECK y el permiso del worker, `permisos-worker.sh` ampliado (42 comprobaciones). Sin commit.
-- ⏳ **Falta en v0.10:** API (`kind` al crear, `insights` en la vista, `GET /profit` con aritmética de centavos en `BigInt`); worker (`tzdata`, «hoy» en `America/Mexico_City` también para v0.9, indicadores, Pareto, anomalías, pronóstico con su backtest); pantallas (informe con gráficas y su tabla equivalente, y la vista de resultado ventas menos gastos); pruebas de ataque (dinero en `Decimal`, zona horaria, IDOR del resultado); laboratorio y capítulo; PR.
+- ✅ API: `kind` al crear, `kind` e `insights` en la vista y `GET /profit` con centavos en `BigInt` (33 pruebas unitarias nuevas, 269 en total; e2e 111). Sin commit.
+- ⏳ **Falta en v0.10:** worker (`tzdata`, «hoy» en `America/Mexico_City` también para v0.9, indicadores, Pareto, anomalías, pronóstico con su backtest); pantallas (informe con gráficas y su tabla equivalente, y la vista de resultado ventas menos gastos); pruebas de ataque (dinero en `Decimal`, zona horaria, IDOR del resultado); laboratorio y capítulo; PR.
 - **Pendientes de gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` (con permiso del dueño); `ESTADO_PROYECTO.md` desactualizado (al cerrar v0.10).
