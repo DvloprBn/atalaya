@@ -10,6 +10,7 @@ from .cfdi_zip import read_cfdi_zip
 from .inspect_csv import inspect_csv
 from .inspect_xlsx import inspect_xlsx
 from .limits import SECONDS_PER_FILE
+from .pdf_reader import inspect_pdf
 from .store import Job
 from .timelimit import time_limit
 from .verdict import Reject
@@ -67,7 +68,11 @@ def review(uploads_dir: str, job: Job) -> str | None:
                 if not data.startswith(_PK):
                     raise Reject("corrupt")
                 read_cfdi_zip(data)  # todas las entradas: UNA mala rechaza todo el ZIP
-            else:
+            elif job.kind == "pdf":
+                if not data.startswith(b"%PDF-"):
+                    raise Reject("corrupt")
+                inspect_pdf(data)  # en un proceso hijo con tope de memoria y de tiempo
+            else:  # un tipo que el worker no conoce: cerrado por defecto
                 raise Reject("corrupt")
         return None
     except Reject as rejected:

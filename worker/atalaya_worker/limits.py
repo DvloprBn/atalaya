@@ -23,3 +23,14 @@ MAX_CFDI_BYTES = 1024 * 1024  # un comprobante real pesa unos KB; 1 MB ya es muc
 MAX_XML_DEPTH = 20  # un CFDI anida unos 6 niveles
 MAX_XML_ELEMENTS = 50_000
 MAX_ATTR_CHARS = 4_000  # un atributo más largo es un ataque o un error, no un dato
+
+# ── PDF (v0.12) ── Se leen en un PROCESO HIJO con estos topes (ver pdf_reader.py y pdf_child.py).
+MAX_PDF_PAGES = 50
+PDF_WALL_SECONDS = 15  # reloj de pared del hijo: por debajo de los 20 s de la revisión, para que el hijo muera primero
+PDF_CPU_SECONDS = 15  # RLIMIT_CPU: el núcleo lo mata aunque se cuelgue dentro de código que no atiende señales
+# RLIMIT_AS del hijo: una bomba de descompresión choca aquí y no con los 512 MB del contenedor.
+PDF_MEMORY_BYTES = 384 * 1024 * 1024
+MAX_PDF_OBJECTS = 100_000  # un reporte de 50 páginas tiene unos cientos
+MAX_PDF_DEPTH = 32  # diccionarios dentro de diccionarios: un PDF real anida unos 5 niveles
+MAX_PDF_CELL = 1_000  # caracteres por celda; la limpieza recorta a 200 y lo cuenta
+MAX_PDF_OUTPUT = 32 * 1024 * 1024  # lo que el hijo puede devolver: más es un archivo hostil, no un reporte

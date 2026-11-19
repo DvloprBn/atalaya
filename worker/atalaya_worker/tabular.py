@@ -1,4 +1,4 @@
-"""Leer un CSV o un .xlsx como una tabla: encabezado + filas. Es lo único que toca openpyxl.
+"""Leer un CSV o un .xlsx como una tabla: encabezado + filas. Es lo único que toca openpyxl (los CFDI y los PDF tienen su lector).
 
 openpyxl parsea XML de desconocidos, así que se usa lo más acotado que ofrece: modo de SOLO LECTURA (no carga la hoja
 entera en memoria), solo VALORES (nunca fórmulas), sin vínculos externos; `defusedxml` está instalado y openpyxl lo
@@ -106,6 +106,10 @@ def read_cfdi(data: bytes, kind: str) -> Table:
 def read_table(data: bytes, kind: str) -> Table:
     if kind in ("xml", "zip"):
         return read_cfdi(data, kind)
+    if kind == "pdf":
+        from .pdf_table import read_pdf  # aquí y no arriba: `pdf_table` necesita `Table`, que vive en este módulo
+
+        return read_pdf(data)
     if kind == "csv":
         return read_csv(data)
     if kind == "xlsx":

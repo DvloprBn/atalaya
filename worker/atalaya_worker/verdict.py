@@ -1,6 +1,11 @@
 """Los motivos de rechazo son una lista CERRADA (la misma del contrato y del CHECK de la base)."""
 
-REASONS = frozenset({"zip_bomb", "too_many_entries", "range_too_large", "corrupt", "empty", "worker_timeout", "not_cfdi"})
+REASONS = frozenset(
+    {
+        "zip_bomb", "too_many_entries", "range_too_large", "corrupt", "empty", "worker_timeout", "not_cfdi",
+        "encrypted", "active_content", "no_text_layer", "no_table",  # solo de PDF (v0.12)
+    }
+)  # fmt: skip
 
 
 class Reject(Exception):  # noqa: N818 - no es un «error»: es el resultado normal de revisar un archivo malo
