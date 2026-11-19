@@ -52,4 +52,4 @@
 - ✅ Pantallas de v0.10 (informe con gráficas y su tabla, `/resultado`, tipo ventas o gastos): 5 pruebas nuevas en Chrome real (suite completa: 32). Sin commit.
 - ✅ Laboratorio v0.10 (32 fichas) y capítulo v0.10 de la guía.
 - ⏳ **Falta en v0.10:** reescribir `ESTADO_PROYECTO.md`; subir la rama, PR y CI (primera vez con `openpyxl`, el café y el tope general escalable en GitHub).
-- **Pendientes de gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` (con permiso del dueño); `ESTADO_PROYECTO.md` desactualizado (al cerrar v0.10).
+- **Gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` puestas el 2026-11-19; `ESTADO_PROYECTO.md` al día.
