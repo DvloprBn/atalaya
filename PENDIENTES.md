@@ -43,6 +43,7 @@
 | Id | Qué | Quién | Cuándo |
 |---|---|---|---|
 | P-1 | Una vez, 3 pruebas de `twofactor` fallaron en una corrida partida en dos y no reproduce. Sin explicar. | Claude | Si vuelve a salir |
+| P-2 | Una vez (CI del 2026-11-19, commit `9a9e4dc`) la API dejó de responder entre la semilla y el smoke: fallaron justo las 11 comprobaciones que pasan por ella. En 6 intentos aquí (uno con medio núcleo por contenedor) no se reprodujo; la siguiente corrida del CI pasó. El CI ya imprime, si algo falla, el estado de cada contenedor (salida, `OOMKilled`, reinicios) y el registro completo de la API: si vuelve, leerlo con `gh run view --log-failed`. | Claude | Si vuelve a salir |
 
 ## Ideas sin fecha
 - Avisar en la pantalla de Cuenta cuando hubo un robo de sesión reciente (hoy solo llega el correo). Claude.

@@ -2,14 +2,14 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-19** (v0.12 construida y verificada en `fase/v0.12-pdf`, sin PR todavía)
+Última actualización: **2026-11-19** (v0.12 cerrada: PR #11 fusionado, etiqueta `v0.12`)
 
 ---
 
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-19
 
-**Situación:** **v0.12 (PDF) construida y verificada** en la rama `fase/v0.12-pdf` (sale de `main`, que tiene hasta v0.11 y S-15). Commits locales por ruta; **falta**: subir la rama, abrir el PR (sin `gh`: desde la web), mirar el CI, fusionar y poner la etiqueta `v0.12` (cada paso con el sí del dueño). El detalle de v0.11 bajó a `docs/historial/ESTADOS_ANTERIORES.md`.
+**Situación:** **v0.12 cerrada (2026-11-19).** PR #11 fusionado en `main` (`49207a6`) con el CI **5/5** y etiqueta `v0.12` en `16e307d` (anotada y subida); `main` tiene hasta v0.12, con las etiquetas `v0.1`–`v0.12`. **`gh` sí está instalado y con sesión** (cuenta del dueño): el PR, su CI y sus registros (`gh run view --log-failed`) se manejan desde aquí; `gh pr edit` falla con la 2.46 (choca con «Projects classic»), y `gh api` lo resuelve. El detalle de v0.11 está en `docs/historial/ESTADOS_ANTERIORES.md`.
 **Hecho en v0.12** (diseño completo en `DECISIONES.md`, sección «v0.12»):
 - **Contrato** 0.12.0 (`kind` `pdf`; motivos `encrypted`, `active_content`, `no_text_layer`, `no_table`; problema `table_skipped`) y **migración** `pdf_kinds` (CHECK ampliados, probada en una transacción revertida: 9 válidas pasan, 6 inválidas se bloquean).
 - **API:** puerta de `.pdf` (`pdf-signature.ts`): firma en el byte 0, `/Encrypt` y contenido activo **a la vista** → 415. Lo escrito con escapes o comprimido pasa a propósito (con prueba) y lo frena el worker.
@@ -18,15 +18,17 @@
 - **Laboratorio** `docs/laboratorio/v0.12-pdf.md` (21 ataques o fallas), **capítulo v0.12** y `scripts/generar_pdf.py` (reporte ficticio de 80 ventas en 3 páginas; el worker real da **6 315.00** y 3 `table_skipped`, como el manifiesto).
 - **Defectos atrapados por las pruebas:** pdfplumber envolvía el `MemoryError` (la bomba salía `corrupt`); una edición mía se comió el `else` de `review.py` (todo PDF `corrupt` y un tipo desconocido ya no se rechazaba; ahora tiene prueba); una falla sembrada sobrevivía porque el PDF cifrado de prueba fallaba antes de tiempo (ahora con RC4 válido).
 **Pruebas (todas verdes el 2026-11-19):** worker **352** · API unitarias **303** · e2e **150** (12 archivos; 18 nuevas de PDF contra el worker real, con una bomba de 1 GB que choca en ~1 s) · Chrome real **38** · `permisos-worker.sh`, `smoke.sh` y `build` en orden. **Fallas sembradas:** 11/11 en el código del PDF, 5/5 en la puerta, 1 en el worker vivo (caen las 2 e2e de JavaScript escondido) y 1 en la pantalla.
-**Siguiente:** cerrar v0.12 (subir, PR, CI, fusionar, etiqueta). Después, **v1.0** según `PLAN_DESARROLLO.md` (demo de 24 h, compose de producción, CSP en bloqueo, ZAP; ahí caen S-1 a S-5 y S-8 a S-10).
+**Lo que destapó el CI** (corregido antes de fusionar; detalle en `DECISIONES.md`): la e2e de la bomba consultaba `/api/health`, que el smoke agota justo antes; `THROTTLE_SCALE` de 10 a **15** (la e2e hace 107 subidas); `overrides` de `effect` a 3.22.4 por GHSA-7589-6fvf-x4pw (H-2); y una corrida con la API muda durante el smoke que no se reprodujo (P-2): el CI ahora imprime el estado de cada contenedor y el registro de la API si algo falla.
+**Siguiente:** **v1.0** según `PLAN_DESARROLLO.md` (demo de 24 h, compose de producción, CSP en bloqueo, ZAP; ahí caen S-1 a S-5 y S-8 a S-10).
 **Bloqueos:** ninguno técnico. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
-**Pendientes** (detalle en `PENDIENTES.md`): D-1 (CSV en latin1), D-2 (solo la primera hoja de un `.xlsx`), D-3 (Excel real y datos de un negocio real sin probar), **D-4 (PDF sin líneas → `no_table`)**, P-1 (3 pruebas de `twofactor` que fallaron una vez y no reproducen) y los de seguridad S-1 a S-13.
+**Pendientes** (detalle en `PENDIENTES.md`): D-1 (CSV en latin1), D-2 (solo la primera hoja de un `.xlsx`), D-3 (Excel real y datos de un negocio real sin probar), **D-4 (PDF sin líneas → `no_table`)**, **H-2** (quitar el `overrides` de `effect` al subir Prisma), P-1 (3 pruebas de `twofactor` que fallaron una vez y no reproducen), **P-2** (la API muda en un smoke del CI, sin reproducir) y los de seguridad S-1 a S-13.
 **Ojo al probar:** (1) las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas, `docker compose restart api`; **pero el CI no reinicia** entre el smoke y las e2e (el smoke agota `/api/health`): una e2e no debe consultar esa ruta, y para reproducir el CI no se reinicia; `THROTTLE_SCALE` es **15** desde v0.12 (la e2e hace 107 subidas; con 10 el CI daba 429); (2) **antes de una e2e, reconstruir las imágenes** (`docker compose up -d --build api worker`): el worker viejo no trae pdfplumber; (3) `docker compose` necesita `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD` en `.env` (ya están en el del dueño); (4) los PDF de prueba se arman con `worker/tests/pdf_maker.py` y `api/test/e2e/pdf.ts` (la prueba de Chrome usa este último).
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-19 | v0.12 cerrada: PR #11 fusionado con el CI 5/5 y etiqueta `v0.12` en `16e307d`. Antes de fusionar, el CI destapó 4 cosas, corregidas en la rama: la e2e de la bomba contra `/api/health` (429 tras el smoke), el tope de subidas (`THROTTLE_SCALE` a 15), GHSA-7589-6fvf-x4pw en `effect` (`overrides`, H-2) y una API muda sin reproducir (P-2; el CI ahora imprime su estado). Corregida la nota vieja «no hay `gh`»: sí está instalado y con sesión. |
 | 2026-11-19 | v0.12 construida y verificada en `fase/v0.12-pdf`: contrato 0.12.0 y migración `pdf_kinds`, puerta de `.pdf` en la API, lector de PDF en un proceso hijo con topes (memoria, CPU, reloj) y tabla lógica, pantalla, laboratorio, capítulo y generador. Worker 352, API 303, e2e 150, Chrome 38; fallas sembradas detectadas. Commits locales; falta subir, PR, CI, fusionar y etiqueta. |
 | 2026-11-19 | Auditoría de las dependencias de producción del worker con `pip-audit` (7 paquetes de `uv.lock`: defusedxml, et-xmlfile, openpyxl, psycopg, psycopg-binary, redis, tzdata): sin vulnerabilidades conocidas. No cubre las de desarrollo ni la imagen base (S-4). Con esto, API, web y worker quedan auditados. |
 | 2026-11-18 | v0.11 a medias en `fase/v0.11-cfdi`: contrato, migración, puerta de la API y **worker de CFDI** (lector seguro con `defusedxml`, ZIP, tabla virtual, descartes contados) con 312 pruebas y 7 e2e nuevas contra el worker real (XXE dentro de ZIP incluido); defecto atrapado: la limpieza perdía en silencio los códigos nuevos. Falta pantalla, generador, laboratorio, capítulo, PR y etiqueta. `main` y las etiquetas `v0.7`–`v0.10` al día. |
