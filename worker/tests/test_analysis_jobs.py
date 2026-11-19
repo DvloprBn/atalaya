@@ -46,10 +46,10 @@ class FakeStore:
         self.preview = preview
         return self._saves
 
-    def save_report(self, _id, report):
+    def save_report(self, _id, report, insights):
         if self.boom:
             raise self.boom
-        self.report = report
+        self.report, self.insights = report, insights
         return self._saves
 
     def fail(self, _id, reason):
@@ -110,6 +110,9 @@ class TestCleanStage:
         store, queue = FakeStore(work("queued", MAPPING)), FakeQueue()
         run(store, queue, dirs)
         assert store.report["rowsKept"] == 2 and store.report["totalAmount"] == "15.50" and store.failed == []
+        # Los indicadores se guardan JUNTO con el informe, con «hoy» en la zona del negocio y coherentes entre sí.
+        assert store.insights["timezone"] == "America/Mexico_City"
+        assert store.insights["indicators"]["netAmount"] == store.report["totalAmount"] == "15.50"
         assert files(dirs) == [f"{RESULT_FILE}.clean.csv", f"{RESULT_FILE}.report.csv"]  # sin temporales
         text = (Path(dirs[1]) / f"{RESULT_FILE}.clean.csv").read_text(encoding="utf-8-sig")
         assert "'=SUMA(1)" in text  # la fórmula del archivo salió neutralizada

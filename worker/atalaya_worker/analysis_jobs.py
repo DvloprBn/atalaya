@@ -15,12 +15,14 @@ from .analysis_store import AnalysisStore, AnalysisWork
 from .cleaner import check_mapping, clean
 from .export import write_clean, write_report
 from .failure import AnalysisFail
+from .insights import build_insights
 from .limits import SECONDS_PER_ANALYSIS
 from .preview import build_preview
 from .queues import ANALYSIS_STREAM, GROUP
 from .review import load_verified
 from .tabular import read_table
 from .timelimit import time_limit
+from .tz import business_today
 from .verdict import Reject
 
 log = logging.getLogger("atalaya.worker.analysis")
@@ -45,11 +47,13 @@ def _clean(store: AnalysisStore, uploads_dir: str, results_dir: str, work: Analy
     table = _table(uploads_dir, work)
     mapping = work.mapping or {}
     check_mapping(mapping, len(table.header))
-    rows, report = clean(table, mapping)
+    today = business_today()  # un solo «hoy» para todo el análisis: la limpieza y los indicadores deben coincidir
+    rows, report = clean(table, mapping, today=today)
+    insights = build_insights(rows, today)
     mapped = {f for f in ("date", "amount", "quantity", "product", "branch", "orderId") if mapping.get(f) is not None}
     write_clean(results_dir, work.result_key, rows, mapped)
     write_report(results_dir, work.result_key, report)
-    if not store.save_report(work.id, report):
+    if not store.save_report(work.id, report, insights):
         _discard(results_dir, work.result_key)  # el análisis se borró mientras trabajábamos: no dejar archivos huérfanos
 
 

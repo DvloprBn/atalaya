@@ -1,6 +1,6 @@
 """Lo que el worker hace en la base para los ANÁLISIS. Mismo rol mínimo que en `store.py`:
 
-    SELECT (id, upload_id, status, mapping, result_key) y UPDATE (status, preview, report, fail_reason, updated_at)
+    SELECT (id, upload_id, status, mapping, result_key) y UPDATE (status, preview, report, insights, fail_reason, updated_at)
     sobre `analyses`; más lo que ya lee de `uploads`. No ve de quién es un análisis.
 
 Cada escritura va CONDICIONADA al estado en la propia sentencia: si la persona borró el análisis (o cambió algo)
@@ -68,11 +68,13 @@ class AnalysisStore:
             == 1
         )
 
-    def save_report(self, analysis_id: str, report: dict) -> bool:
+    def save_report(self, analysis_id: str, report: dict, insights: dict) -> bool:
+        """El informe de calidad y los indicadores se escriben JUNTOS: el análisis no está «terminado» sin los dos."""
         return (
             self._run(
-                "UPDATE analyses SET status = 'done', report = %s, updated_at = now() WHERE id = %s AND status = 'running'",
-                (Jsonb(report), analysis_id),
+                "UPDATE analyses SET status = 'done', report = %s, insights = %s, updated_at = now() "
+                "WHERE id = %s AND status = 'running'",
+                (Jsonb(report), Jsonb(insights), analysis_id),
             )
             == 1
         )

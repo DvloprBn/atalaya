@@ -1185,7 +1185,7 @@ export interface components {
             /** Format: date */
             date: string;
             amount: components["schemas"]["Money"];
-            /** @description Lo normal para ese día de la semana (la mediana). */
+            /** @description Lo normal para ese día: la mediana del mismo día de la semana en las 5 semanas de cada lado. */
             expected: components["schemas"]["Money"];
             /** @enum {string} */
             direction: "high" | "low";
@@ -1194,7 +1194,7 @@ export interface components {
         };
         Anomalies: {
             /**
-             * @description Hacen falta al menos 28 días activos.
+             * @description Hacen falta al menos 28 días con datos Y que el 60 % de los días del rango los tengan: unos gastos espaciados (renta el 1, nómina el 15) no se analizan por día de la semana.
              * @enum {string}
              */
             status: "ok" | "insufficient_data";
@@ -1209,7 +1209,7 @@ export interface components {
         };
         Forecast: {
             /**
-             * @description Hacen falta al menos 8 semanas de historia.
+             * @description Hacen falta al menos 8 semanas de historia (el rango de fechas) Y que el 60 % de los días del rango tengan datos: unas pocas filas sueltas en un rango largo, o gastos espaciados, no bastan.
              * @enum {string}
              */
             status: "ok" | "insufficient_data";

@@ -13,7 +13,7 @@ SYNONYMS: dict[str, tuple[str, ...]] = {
     "date": ("fecha", "date", "dia", "timestamp", "fecha venta", "fecha de venta", "fecha pedido"),
     "amount": ("importe", "total", "monto", "amount", "venta", "ventas", "precio", "subtotal", "ingreso", "price", "revenue"),
     "quantity": ("cantidad", "cant", "qty", "quantity", "unidades", "piezas"),
-    "product": ("producto", "articulo", "item", "descripcion", "product", "sku", "concepto"),
+    "product": ("producto", "articulo", "item", "descripcion", "product", "sku", "concepto", "categoria", "category", "rubro"),
     "branch": ("sucursal", "tienda", "branch", "store", "local", "ubicacion", "sede"),
     "orderId": ("folio", "ticket", "orden", "pedido", "order", "factura", "transaccion", "id"),
 }
