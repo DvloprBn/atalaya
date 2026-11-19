@@ -58,5 +58,6 @@
 - ✅ Contrato, migración `cfdi_kinds` y puerta de la API (`.xml` y `.zip` por firma). Comiteado.
 - ✅ Worker de CFDI: lector seguro, ZIP, tabla virtual, descartes contados, revisión profunda; 312 pruebas con el catálogo XXE. Comiteado.
 - ✅ e2e de CFDI contra el worker real (7: ZIP con cifras exactas, `.xml` suelto, XXE en `.xml` y dentro de ZIP, billion laughs, entradas malas, 501 entradas). Comiteado en el cierre.
-- ⏳ **Falta en v0.11:** pantalla (selector `.csv,.xlsx,.xml,.zip`, `precheck`, aviso «no es una herramienta fiscal», etiquetas; arreglar `archivos.spec.ts`); generador de CFDI sintéticos (RFC de pruebas del SAT, salida en `datos-ejemplo/`); laboratorio y capítulo; PR y CI; etiqueta `v0.11` (con permiso del dueño).
+- ✅ Pantalla, generador de CFDI sintéticos, laboratorio y capítulo (2026-11-19, sin comitear).
+- ⏳ **Falta en v0.11:** comitear, PR y CI; etiqueta `v0.11` (con permiso del dueño).
 - **Gestión:** `main` contiene v0.10; etiquetas `v0.1`–`v0.10` puestas.

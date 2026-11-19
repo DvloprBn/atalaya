@@ -853,3 +853,47 @@ Hechas a mano en SVG (sin librería), con las reglas de la guía de visualizaci�
 - Un CSV en **latin1** sigue rechazándose; de un `.xlsx` solo se lee la primera hoja.
 - S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
 - Siguen sin probarse un Excel o LibreOffice reales y datos de un negocio real; el café es sintético.
+
+## Capítulo v0.11: un XML es un programa disfrazado de documento
+
+> Lo nuevo: subir un **CFDI** (`.xml`) o un **ZIP** de CFDI y analizarlo con la misma tubería de v0.9 y v0.10. Ataques y defensas en [`laboratorio/v0.11-cfdi.md`](laboratorio/v0.11-cfdi.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build                     # reconstruir: la API vieja daba 415 a todo .xml
+docker compose exec api npx prisma migrate deploy   # cfdi_kinds: amplía dos CHECK, sin tocar datos
+python3 scripts/generar_cfdi.py                  # 60 CFDI ficticios en datos-ejemplo/
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`), sube `datos-ejemplo/cfdi-cafe.zip` y pulsa **Analizar ventas**. El neto debe ser **11 799.00** y el informe de calidad debe contar **4 descartados** (2 pagos y 2 en dólares). Prueba también `cfdi-uno.xml` suelto.
+
+### 2. La idea: una tabla virtual
+
+No se construyó un análisis paralelo para XML. El lector convierte los CFDI en una **tabla con un renglón por concepto** y desde ahí todo es igual que con un CSV: mapeo, limpieza, informe, indicadores. El `uuid` se sugiere como pedido, así que varios conceptos de una factura cuentan como **un** pedido.
+
+### 3. Qué se lee y cómo se cuenta
+
+| Dato | Regla |
+|---|---|
+| Importe | `Importe − Descuento` del concepto, en `Decimal` |
+| IVA | Solo los traslados con `Impuesto 002` |
+| Ingreso (`I`) | Suma |
+| Egreso (`E`) | Resta: es una devolución |
+| Pago, traslado, nómina | Se descartan **contados** |
+| Otra moneda | Se descarta contada; no se convierte |
+| Fecha | La de emisión, sin hora y sin mover de zona |
+
+### 4. El ataque de la fase: XXE
+
+Un XML puede declarar «entidades» que el lector resuelve: leer `/etc/passwd`, llamar a una dirección interna o expandirse hasta agotar la memoria. La defensa es radical y por eso simple: **el DTD se prohíbe entero** (`defusedxml`), porque un CFDI legítimo nunca lo lleva. Va en **dos capas**: la API rechaza `<!DOCTYPE` de un `.xml` suelto (415) y el worker lo vuelve a rechazar. Dentro de un ZIP solo existe la del worker (la API no abre ZIP), y por eso esa ruta tiene sus propias pruebas contra el worker real.
+
+Además, topes **antes** de interpretar: 1 MiB por XML, 20 niveles, 50 000 elementos, 4 000 caracteres por atributo, y por ZIP 500 entradas y 50 MB descomprimidos. Un ZIP con una entrada mala se rechaza **entero**.
+
+### 5. Lo que la prueba encontró
+
+La lista cerrada de problemas vive en **dos sitios** (el contrato y `cleaner.py`). Los dos códigos nuevos se agregaron en uno solo y la limpieza los **ignoraba sin error**: los descartes no se contaban. Ahora una prueba exige que las dos listas sean idénticas. Lección: una lista cerrada duplicada necesita una prueba que las compare.
+
+### 6. Lo que NO hace
+
+No valida el sello ni el timbre, ni el estatus (un CFDI cancelado se ve vigente), ni que el IVA cuadre. **No es una herramienta fiscal**, y la pantalla lo dice.
