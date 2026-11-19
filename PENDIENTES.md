@@ -57,5 +57,6 @@
 ## Siguiente fase (v0.11) — avance 2026-11-19
 - ✅ Contrato (`kind` con `xml` y `zip`, motivo `not_cfdi`, problemas `unsupported_document` y `unsupported_currency`) y diseño en `DECISIONES.md`. Sin commit.
 - ✅ Migración `cfdi_kinds` (CHECK de `uploads.kind` y de `reject_reason` ampliados), probada. Sin commit.
-- ⏳ **Falta en v0.11:** API (firma de `.xml` y `.zip`); worker (lector seguro de CFDI y de ZIP, tabla virtual, descartes contados, revisión profunda con XXE); un generador de CFDI sintéticos con los RFC de pruebas del SAT; pantalla (tipo de archivo, aviso de que no es una herramienta fiscal, etiquetas); pruebas de ataque (XXE y compañía); laboratorio y capítulo; PR.
+- ✅ API: la puerta de `.xml` y `.zip` por firma de bytes (283 unitarias, 30 e2e de subidas). Sin commit.
+- ⏳ **Falta en v0.11:** worker (lector seguro de CFDI y de ZIP, tabla virtual, descartes contados, revisión profunda con XXE); un generador de CFDI sintéticos con los RFC de pruebas del SAT; pantalla (tipo de archivo, aviso de que no es una herramienta fiscal, etiquetas); pruebas de ataque (XXE y compañía); laboratorio y capítulo; PR.
 - **Gestión:** etiqueta `v0.10` puesta el 2026-11-19 en `b5b4385`.
