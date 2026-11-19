@@ -33,12 +33,17 @@ export function UploadForm({ onUploaded }: { onUploaded: () => void }) {
     <form className="card stack" onSubmit={submit} aria-labelledby="subir">
       <h2 id="subir">Subir un archivo</h2>
       <p className="muted">
-        CSV (UTF-8), Excel .xlsx sin macros, un CFDI 3.3 o 4.0 en .xml, o un .zip de CFDI (cada parte, un .xml).
+        CSV (UTF-8), Excel .xlsx sin macros, un CFDI 3.3 o 4.0 en .xml, un .zip de CFDI (cada parte, un .xml) o un PDF con
+        una tabla.
         Hasta 5 MB, 50 000 filas y 200 columnas; hasta 10 archivos por cuenta. Usa solo datos de prueba.
       </p>
       <p className="muted">
         Los CFDI se leen como datos de ventas (un renglón por concepto). Atalaya <strong>no es una herramienta fiscal</strong>:
         no valida el sello ni el timbrado ante el SAT ni sirve para declarar.
+      </p>
+      <p className="muted">
+        De un PDF se lee su tabla <strong>con líneas</strong> (y las páginas que la continúan), hasta 50 páginas. No se leen
+        escaneos, PDF protegidos con contraseña ni PDF con JavaScript o archivos adjuntos.
       </p>
       <label>
         Archivo
