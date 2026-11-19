@@ -19,6 +19,25 @@ export class Browser {
     return this.request('POST', path, body, headers);
   }
 
+  /** Subida multipart: SIN content-type a mano, para que fetch ponga el límite (boundary) correcto. */
+  async postForm(path: string, form: FormData): Promise<ApiResponse> {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ') },
+      body: form,
+    });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : null };
+  }
+
+  async put(path: string, body: unknown): Promise<ApiResponse> {
+    return this.request('PUT', path, body);
+  }
+
+  async delete(path: string): Promise<ApiResponse> {
+    return this.request('DELETE', path);
+  }
+
   async get(path: string): Promise<ApiResponse> {
     return this.request('GET', path);
   }

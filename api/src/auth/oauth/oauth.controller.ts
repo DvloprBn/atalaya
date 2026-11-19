@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { Public } from '../../common/auth/public.decorator.js';
 import { scaled } from '../../common/http/throttle.js';
+import { SecurityLog } from '../../security/security-log.service.js';
 import { setSessionCookies } from '../cookies.js';
 import { OAuthError } from './oauth-error.js';
 import { OAuthService } from './oauth.service.js';
@@ -23,7 +24,10 @@ const FAILED = '/login?error=google';
 export class OAuthController {
   private readonly log = new Logger('OAuth');
 
-  constructor(private readonly oauth: OAuthService) {}
+  constructor(
+    private readonly oauth: OAuthService,
+    private readonly security: SecurityLog,
+  ) {}
 
   @Public()
   @Get('providers')
@@ -59,7 +63,9 @@ export class OAuthController {
       return res.redirect(302, OK);
     } catch (error) {
       // Al log, el CÓDIGO del rechazo (nunca tokens ni correos). A la persona, siempre lo mismo.
-      this.log.warn(`login con Google rechazado: ${error instanceof OAuthError ? error.code : 'error_inesperado'}`);
+      const code = error instanceof OAuthError ? error.code : 'error_inesperado';
+      this.log.warn(`login con Google rechazado: ${code}`);
+      await this.security.record('google_rejected', { ip: req.ip, detail: code }); // S-14
       return res.redirect(302, FAILED);
     }
   }

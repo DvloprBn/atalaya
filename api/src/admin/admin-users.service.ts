@@ -4,6 +4,7 @@ import { InvitationsService } from '../auth/invitations.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { writeAudit } from '../security/audit.js';
 import { canAssign, canManage, manageableLevels } from './hierarchy.js';
 
 const PAGE_SIZE = 20;
@@ -70,6 +71,7 @@ export class AdminUsersService {
       }
       const user = await tx.user.create({ data: { email, roleId: role.id }, select: { id: true, email: true } });
       await this.invitations.send(tx, user, role.name);
+      await writeAudit(tx, 'user_created', actor.id, user.id, role.name);
       return user.id;
     });
     return this.get(actor, id);
@@ -82,6 +84,7 @@ export class AdminUsersService {
       if (!canAssign(actor.role.level, target.level, role.level)) throw new ForbiddenException();
       if (target.roleId !== role.id) await this.ensureCapacity(tx, role);
       await tx.user.update({ where: { id }, data: { roleId: role.id } });
+      await writeAudit(tx, 'role_changed', actor.id, id, role.name);
     });
     return this.get(actor, id);
   }
@@ -93,11 +96,13 @@ export class AdminUsersService {
         await tx.user.update({ where: { id }, data: { disabledAt: new Date() } });
         // Sus sesiones se cierran AHORA y para siempre: al reactivarla, ninguna revive.
         await this.sessions.revokeAllForUser(id, 'account_disabled', tx);
+        await writeAudit(tx, 'user_disabled', actor.id, id);
       } else {
         // Reactivar cuenta contra el tope (p. ej. ya hay otro director activo).
         const role = await tx.role.findUniqueOrThrow({ where: { id: target.roleId } });
         if (target.disabled) await this.ensureCapacity(tx, role);
         await tx.user.update({ where: { id }, data: { disabledAt: null } });
+        await writeAudit(tx, 'user_enabled', actor.id, id);
       }
     });
     return this.get(actor, id);

@@ -5,6 +5,8 @@ se escribe la llave HEARTBEAT_KEY con vigencia HEARTBEAT_TTL_SECONDS. Si el work
 muere, la llave caduca sola y /api/health reporta worker = "down".
 """
 
+import logging
+import threading
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -22,3 +24,16 @@ class KeyValueStore(Protocol):
 def beat(store: KeyValueStore, now: datetime | None = None) -> None:
     moment = now or datetime.now(UTC)
     store.set(HEARTBEAT_KEY, moment.isoformat(), ex=HEARTBEAT_TTL_SECONDS)
+
+
+def run_heartbeat(store: KeyValueStore, stop: threading.Event) -> None:
+    """Late en un HILO aparte: revisar un archivo grande puede tardar más que la vigencia del latido (30 s) y, sin
+    esto, /api/health diría «worker caído» mientras trabaja. Un fallo de Redis no lo detiene: se reintenta."""
+    log = logging.getLogger("atalaya.worker.heartbeat")
+    while not stop.is_set():
+        try:
+            beat(store)
+        except Exception as error:  # noqa: BLE001 - nada que ocurra aquí debe matar el hilo del latido
+            # Solo el tipo: el mensaje de un error de Redis puede incluir la URL con la contraseña.
+            log.warning("no se pudo escribir el latido: %s", type(error).__name__)
+        stop.wait(HEARTBEAT_EVERY_SECONDS)

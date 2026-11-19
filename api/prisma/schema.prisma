@@ -16,10 +16,10 @@ datasource db {
 /// Los 6 niveles de permiso (0 = usuario … 5 = super). Filas FIJAS: las siembra
 /// la migración, no el código. `maxCount` = cuántas cuentas puede haber (null = sin límite).
 model Role {
-  id       Int     @id
-  name     String  @unique @db.VarChar(20)
-  level    Int     @unique
-  maxCount Int?    @map("max_count")
+  id       Int    @id
+  name     String @unique @db.VarChar(20)
+  level    Int    @unique
+  maxCount Int?   @map("max_count")
   users    User[]
 
   @@map("roles")
@@ -27,23 +27,28 @@ model Role {
 
 /// Una persona, una cuenta. Solo existe cuando su correo ya se verificó (ver EmailToken).
 model User {
-  id              String    @id @default(uuid(7)) @db.Uuid
+  id              String          @id @default(uuid(7)) @db.Uuid
   /// Siempre en minúsculas (lo exige un CHECK en la base).
-  email           String    @unique @db.VarChar(254)
+  email           String          @unique @db.VarChar(254)
   /// Argon2id. null mientras una invitación no se acepta (y en cuentas que solo entran con Google, v0.5).
-  passwordHash    String?   @map("password_hash")
-  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
-  roleId          Int       @map("role_id")
-  role            Role      @relation(fields: [roleId], references: [id])
+  passwordHash    String?         @map("password_hash")
+  emailVerifiedAt DateTime?       @map("email_verified_at") @db.Timestamptz(3)
+  roleId          Int             @map("role_id")
+  role            Role            @relation(fields: [roleId], references: [id])
   /// Cuenta desactivada: no entra y sus sesiones dejan de servir al instante.
-  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(3)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  disabledAt      DateTime?       @map("disabled_at") @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions        Session[]
   emailTokens     EmailToken[]
   twoFactor       TwoFactor?
   recoveryCodes   RecoveryCode[]
   oauthIdentities OAuthIdentity[]
+  securityEvents  SecurityEvent[]
+  auditAsActor    AuditLog[]      @relation("AuditActor")
+  auditAsTarget   AuditLog[]      @relation("AuditTarget")
+  uploads         Upload[]
+  analyses        Analysis[]
 
   @@map("users")
 }
@@ -186,4 +191,109 @@ model OAuthIdentity {
   @@unique([provider, subject])
   @@unique([userId, provider])
   @@map("oauth_identities")
+}
+
+/// Bitácora de seguridad: lo que un atacante (o un descuido) deja como rastro. Solo se escribe
+/// desde security-log.service.ts, que además la topa y la poda. NUNCA guarda correos, contraseñas,
+/// tokens ni la IP en claro: `ipHash` es un HMAC con llave del servidor (una IP son 32 bits: un
+/// SHA-256 simple se invierte en minutos probando las 4 mil millones de direcciones).
+model SecurityEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// login_failed | login_locked | two_factor_failed | refresh_reuse | google_rejected | rate_limited | csp_violation (CHECK en la base).
+  type      String   @db.VarChar(32)
+  /// La cuenta implicada, cuando se conoce. Si la cuenta se borra, el rastro se queda sin dueño.
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipHash    String?  @map("ip_hash") @db.Char(64)
+  /// Un código corto (bad_password, token_nonce, /api/auth/login…), nunca datos de la persona.
+  detail    String?  @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
+}
+
+/// Auditoría: quién (un humano con sesión) hizo qué sobre qué cuenta. Distinta de la bitácora de
+/// seguridad: aquí los hechos son legítimos, y lo que importa es poder reconstruirlos.
+model AuditLog {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// user_created | role_changed | user_disabled | user_enabled | two_factor_enabled | two_factor_disabled | recovery_codes_regenerated (CHECK en la base).
+  action    String   @db.VarChar(32)
+  actorId   String?  @map("actor_id") @db.Uuid
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  targetId  String?  @map("target_id") @db.Uuid
+  target    User?    @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  /// Un código corto (p. ej. el rol nuevo: «manager»).
+  detail    String?  @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Un archivo subido (CSV o XLSX) y el resultado de su revisión. Aquí viven solo METADATOS: los bytes están en
+/// el volumen de subidas, bajo `storageKey`. El admin lista estos metadatos, nunca el contenido (decisión de arranque).
+/// Las reglas de forma (tipos, estados, coherencia estado↔motivo↔fecha) las impone un CHECK en la base.
+model Upload {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  /// Si la cuenta se borra, sus archivos también (en cascada; el demo de v1.0 lo necesita).
+  ownerId           String    @map("owner_id") @db.Uuid
+  owner             User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// csv | xlsx. Sale de la FIRMA de los bytes, no de la extensión.
+  kind              String    @db.VarChar(8)
+  /// Nombre original saneado, solo para mostrárselo a su dueño. Nunca se usa como ruta.
+  displayName       String?   @map("display_name") @db.VarChar(100)
+  sizeBytes         Int       @map("size_bytes")
+  /// SHA-256 en hex del contenido: el worker comprueba que lo que lee es lo que la API guardó.
+  sha256            String    @db.Char(64)
+  /// Nombre de archivo generado por el servidor (uuid v4 sin guiones); nunca viene del usuario.
+  storageKey        String    @unique @map("storage_key") @db.Char(32)
+  /// queued | checking | accepted | rejected
+  status            String    @default("queued") @db.VarChar(16)
+  /// Solo cuando status = rejected; lista cerrada (CHECK).
+  rejectReason      String?   @map("reject_reason") @db.VarChar(24)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Cuándo terminó la revisión del worker (accepted o rejected).
+  checkedAt         DateTime? @map("checked_at") @db.Timestamptz(3)
+  /// Borrado pedido mientras el worker revisaba: el worker descarta su resultado y una poda quita la fila.
+  deleteRequestedAt DateTime? @map("delete_requested_at") @db.Timestamptz(3)
+
+  analyses Analysis[]
+
+  @@index([ownerId, createdAt])
+  @@index([status, createdAt])
+  @@map("uploads")
+}
+
+/// El análisis de UN archivo ya aceptado, en dos pasos: vista previa → la persona confirma las columnas → limpieza e informe.
+/// El worker escribe el estado, la vista previa y el informe (columnas con permiso propio); la API, todo lo demás.
+/// Las reglas de forma (estados, motivo solo si falló, qué JSON existe en cada etapa) las impone un CHECK en la base.
+model Analysis {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  /// Si la cuenta o el archivo se borran, el análisis también (los archivos de resultados los retira la API).
+  ownerId    String   @map("owner_id") @db.Uuid
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  uploadId   String   @map("upload_id") @db.Uuid
+  upload     Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  /// previewing | awaiting_mapping | queued | running | done | failed
+  status     String   @default("previewing") @db.VarChar(16)
+  /// Solo cuando status = failed; lista cerrada (CHECK).
+  failReason String?  @map("fail_reason") @db.VarChar(24)
+  /// Columnas, ejemplos y mapeo sugerido (lo escribe el worker). Dato hostil recortado: se muestra como texto.
+  preview    Json?    @db.JsonB
+  /// Lo que la persona confirmó (lo valida y escribe la API contra la vista previa).
+  mapping    Json?    @db.JsonB
+  /// El informe de calidad (lo escribe el worker, solo al terminar bien).
+  report     Json?    @db.JsonB
+  /// Nombre base (32 hex, lo genera la API) de los archivos de resultados: <llave>.clean.csv y <llave>.report.csv.
+  resultKey  String   @unique @map("result_key") @db.Char(32)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// La API la mueve con @updatedAt; el worker la pone a mano (escribe con SQL, no con Prisma).
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, createdAt])
+  @@index([uploadId])
+  @@index([status, createdAt])
+  @@map("analyses")
 }

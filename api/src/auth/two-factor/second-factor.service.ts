@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import type { SessionCookies } from '../cookies.js';
 import type { PublicUser } from '../auth.service.js';
 import { RateLimits } from '../rate-limits.js';
+import { SecurityLog } from '../../security/security-log.service.js';
 import { SessionsService } from '../sessions.service.js';
 import { Challenges } from './challenges.js';
 import { hashRecoveryCode, normalizeRecoveryCode } from './recovery-codes.js';
@@ -23,6 +24,7 @@ export class SecondFactorService {
     private readonly limits: RateLimits,
     private readonly challenges: Challenges,
     private readonly sessions: SessionsService,
+    private readonly security: SecurityLog,
   ) {}
 
   /** ¿Esta cuenta tiene el 2FA CONFIRMADO? (Uno pendiente de confirmar no cuenta.) */
@@ -35,13 +37,14 @@ export class SecondFactorService {
   }
 
   /** Segundo paso del login. null = no (la API responde 401 sin decir por qué). */
-  async verifyLogin(challenge: string, code: string): Promise<{ tokens: SessionCookies; user: PublicUser } | null> {
+  async verifyLogin(challenge: string, code: string, ip?: string): Promise<{ tokens: SessionCookies; user: PublicUser } | null> {
     const userId = await this.challenges.peek(challenge);
     if (!userId || (await this.limits.isTwoFactorLocked(userId))) return null;
 
     if (!(await this.checkCode(userId, code))) {
       await this.limits.recordTwoFactorFailure(userId);
       await this.challenges.recordFailure(challenge);
+      await this.security.record('two_factor_failed', { userId, ip, detail: 'login' });
       return null;
     }
     // El código era bueno. Ahora se gasta el reto: si dos peticiones llegan a la vez

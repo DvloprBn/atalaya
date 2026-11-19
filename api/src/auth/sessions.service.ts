@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Prisma } from '../generated/prisma/client.js';
+import { MailService } from '../mail/mail.service.js';
+import { loadEnv } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SecurityLog } from '../security/security-log.service.js';
+import { sessionsClosed } from './emails.js';
 import type { SessionCookies } from './cookies.js';
 import { newOpaqueToken, sha256 } from './tokens.js';
 
@@ -27,6 +31,8 @@ export class SessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly security: SecurityLog,
+    private readonly mail: MailService,
   ) {}
 
   /** Inicia sesión: crea la sesión y su primer par de tokens. */
@@ -38,7 +44,7 @@ export class SessionsService {
   }
 
   /** Cambia un refresh por un par nuevo. null = no se puede (la API responde 401). */
-  async rotate(refresh: string): Promise<SessionCookies | null> {
+  async rotate(refresh: string, ip?: string): Promise<SessionCookies | null> {
     const token = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: sha256(refresh) },
       include: { session: { include: { user: { select: { disabledAt: true } } } } },
@@ -48,7 +54,7 @@ export class SessionsService {
     if (session.revokedAt || session.expiresAt <= new Date() || session.user.disabledAt) return null;
 
     if (token.rotatedAt) {
-      await this.handleReuse(token.sessionId, session.userId, token.rotatedAt);
+      await this.handleReuse(token.sessionId, session.userId, token.rotatedAt, ip);
       return null;
     }
 
@@ -91,7 +97,7 @@ export class SessionsService {
   // ya avanzó (r1 → r2 → r3) y reaparece r1, es robo aunque r3 esté vivo.
   // Ante robo se cierran TODAS las sesiones de la cuenta: el ladrón y la víctima vuelven a
   // entrar con contraseña, y solo la víctima la tiene.
-  private async handleReuse(sessionId: string, userId: string, rotatedAt: Date): Promise<void> {
+  private async handleReuse(sessionId: string, userId: string, rotatedAt: Date, ip?: string): Promise<void> {
     const recent = Date.now() - rotatedAt.getTime() < REUSE_GRACE_MS;
     const successor = recent
       ? await this.prisma.refreshToken.findFirst({
@@ -101,7 +107,13 @@ export class SessionsService {
         })
       : null;
     const isRace = successor !== null && successor.rotatedAt === null;
-    if (!isRace) await this.revokeAllForUser(userId, 'reuse_detected');
+    if (isRace) return;
+    await this.revokeAllForUser(userId, 'reuse_detected');
+    await this.security.record('refresh_reuse', { userId, ip });
+    // A la víctima se le AVISA (S-7): sin esto, sus sesiones se cierran y no sabe por qué ni que
+    // alguien tuvo su token. La sesión ya está cerrada: el aviso no abre nada.
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (owner) await this.mail.enqueue(owner.email, sessionsClosed(`${loadEnv().appOrigin}/olvide`));
   }
 
   private async issue(tx: Tx, sessionId: string, userId: string, expiresAt: Date): Promise<SessionCookies> {

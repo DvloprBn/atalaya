@@ -19,7 +19,8 @@ async function bootstrap() {
 
   // Cuerpos JSON de máximo 16 KB: ningún formulario de acceso necesita más,
   // y un cuerpo gigante no puede ocupar memoria antes de validarse.
-  app.useBodyParser('json', { limit: '16kb' });
+  // Los navegadores mandan los reportes CSP con sus propios tipos (application/csp-report, reports+json).
+  app.useBodyParser('json', { limit: '16kb', type: ['application/json', 'application/csp-report', 'application/reports+json'] });
   app.use(cookieParser());
 
   // Toda la API vive bajo /api, en el mismo dominio que el sitio: las cookies

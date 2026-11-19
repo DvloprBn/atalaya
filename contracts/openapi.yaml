@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.6.0
+  version: 0.9.0
   license:
     name: MIT
     identifier: MIT
@@ -379,8 +379,287 @@ paths:
         "200": { $ref: "#/components/responses/AdminUser" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /admin/security/events:
+    get:
+      operationId: adminSecurityEvents
+      summary: Bitácora de seguridad (lo más reciente primero, 20 por página)
+      description: >
+        Exige nivel admin (3). Del origen solo se muestra un prefijo del hash de la IP (para ver que
+        dos eventos vienen del mismo lugar sin revelarla). El correo de una cuenta solo aparece si
+        está por debajo de quien consulta (o es la suya); si no, `user` es null (OWASP API1).
+      parameters:
+        - { name: type, in: query, required: false, schema: { $ref: "#/components/schemas/SecurityEventType" } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de eventos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityEventPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/security/summary:
+    get:
+      operationId: adminSecuritySummary
+      summary: Eventos por día de los últimos 14 días (alimenta el radar del panel)
+      responses:
+        "200":
+          description: Un renglón por día, también los días sin eventos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecuritySummary" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/audit:
+    get:
+      operationId: adminAudit
+      summary: Registro de auditoría (quién hizo qué sobre qué cuenta; 20 por página)
+      description: Mismas reglas de visibilidad de correos que la bitácora.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de entradas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /csp-report:
+    post:
+      operationId: cspReport
+      summary: Recolector de reportes de la política de contenido (CSP)
+      description: >
+        Público a propósito (lo llama el navegador, sin sesión). Responde 204 sea o no un reporte válido
+        (no se le dice nada a quien lo manda); solo un cuerpo que no es JSON de objeto o arreglo da 400, y uno de más
+        de 16 KB, 413. Topado por IP, con un reporte repetido por
+        minuto descartado, y se guarda solo la directiva y el HOST bloqueado (nunca rutas ni parámetros).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/csp-report:
+            schema: { type: object }
+          application/reports+json:
+            schema: { type: array, items: { type: object } }
+      responses:
+        "204": { description: Recibido }
+  /uploads:
+    get:
+      operationId: listUploads
+      summary: Mis archivos subidos (20 por página, los más nuevos primero)
+      description: Solo los de quien pregunta. Nunca devuelve contenido, solo metadatos y estado.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de archivos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createUpload
+      summary: Sube un archivo (CSV o XLSX) y lo encola para su revisión
+      description: >
+        multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:**
+        tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type
+        (415 si no es CSV ni XLSX, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta
+        (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y
+        cualquier otro formato con macros se rechazan con 415. **En el worker, ya encolado:** bomba zip (tamaño
+        descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado. Responde
+        202: el resultado de la revisión profunda se consulta con `getUpload`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/UploadRequest" }
+      responses:
+        "202":
+          description: Aceptado y en cola (`status` = queued)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upload" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "429":
+          description: Se superó el tope de peticiones
+  /uploads/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      operationId: getUpload
+      summary: Estado de un archivo mío
+      description: 404 si no existe O si es de otra cuenta (nunca 403, para no confirmar que existe), también para un admin.
+      responses:
+        "200":
+          description: El archivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upload" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteUpload
+      summary: Borra un archivo mío (el original y sus resultados)
+      description: Mismo 404 que `getUpload`. Si el worker lo está revisando, se marca y el worker descarta el resultado.
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/uploads:
+    get:
+      operationId: adminListUploads
+      summary: Metadatos de los archivos de las cuentas de nivel menor al tuyo (20 por página)
+      description: >
+        Exige nivel admin (3) o más. Solo dueño, tamaño, tipo, estado y fecha: el admin administra cuentas, NO lee
+        datos (nunca hay ruta para el contenido ni para el nombre original). Misma regla de visibilidad que
+        `adminListUsers`.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de metadatos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUploadPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /analyses:
+    get:
+      operationId: listAnalyses
+      summary: Mis análisis (20 por página, los más nuevos primero)
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000 } }
+      responses:
+        "200":
+          description: Una página de análisis
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createAnalysis
+      summary: Empieza el análisis de un archivo mío ya aceptado
+      description: >
+        Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido);
+        el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`.
+        404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay
+        10 análisis en la cuenta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAnalysisRequest" }
+      responses:
+        "202":
+          description: Aceptado; el worker prepara la vista previa (`status` = previewing)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Analysis" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429":
+          description: Se superó el tope de peticiones
+  /analyses/{id}:
+    parameters:
+      - $ref: "#/components/parameters/AnalysisId"
+    get:
+      operationId: getAnalysis
+      summary: Un análisis mío (estado, vista previa, mapeo e informe de calidad)
+      description: 404 si no existe O es de otra cuenta (también para un admin).
+      responses:
+        "200":
+          description: El análisis
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Analysis" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAnalysis
+      summary: Borra un análisis mío y sus resultados (el archivo subido no se toca)
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /analyses/{id}/mapping:
+    parameters:
+      - $ref: "#/components/parameters/AnalysisId"
+    put:
+      operationId: putAnalysisMapping
+      summary: Confirma qué columna es cada campo y lanza la limpieza
+      description: >
+        Paso 2 de 2. Solo con el análisis en `awaiting_mapping` (409 si no). `date` y `amount` son obligatorios;
+        dos campos no pueden apuntar a la misma columna (400); un índice fuera de la vista previa, tampoco (400).
+        Responde 202: el worker limpia el archivo y deja el informe de calidad en `getAnalysis`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Mapping" }
+      responses:
+        "202":
+          description: Aceptado; en cola (`status` = queued)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Analysis" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /analyses/{id}/export/{kind}:
+    parameters:
+      - $ref: "#/components/parameters/AnalysisId"
+      - name: kind
+        in: path
+        required: true
+        schema: { type: string, enum: [clean, report] }
+        description: "`clean` = los datos ya limpios; `report` = el informe de calidad."
+    get:
+      operationId: exportAnalysis
+      summary: Descarga un resultado como CSV
+      description: >
+        Solo con el análisis en `done` (409 si no). **Anti inyección de fórmulas:** toda celda de TEXTO que empiece con
+        `=`, `+`, `-`, `@`, tabulador o retorno de carro sale precedida de una comilla simple (`'`), para que Excel o
+        Calc la lean como texto y no como fórmula. Las columnas numéricas y de fecha salen tipadas, sin tocar.
+        Se entrega como adjunto, con tipo `text/csv` y UTF-8 con BOM (Excel en español lo abre bien).
+      responses:
+        "200":
+          description: El CSV
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 components:
   parameters:
+    AnalysisId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UploadId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     UserId:
       name: id
       in: path
@@ -606,6 +885,79 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    SecurityEventType:
+      type: string
+      enum: [login_failed, login_locked, two_factor_failed, refresh_reuse, google_rejected, rate_limited, csp_violation]
+    AccountRef:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string }
+    SecurityEvent:
+      type: object
+      additionalProperties: false
+      required: [id, type, createdAt, source, detail, user]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/SecurityEventType" }
+        createdAt: { type: string, format: date-time }
+        source: { type: [string, "null"], description: "Primeros 8 caracteres del hash de la IP" }
+        detail: { type: [string, "null"], description: Un código corto (p. ej. bad_password), nunca datos de la persona }
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+    SecurityEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SecurityEvent" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    SecuritySummary:
+      type: object
+      additionalProperties: false
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, total, byType]
+            properties:
+              date: { type: string, format: date }
+              total: { type: integer }
+              byType: { type: object, additionalProperties: { type: integer } }
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      required: [id, action, createdAt, detail, actor, target]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string }
+        createdAt: { type: string, format: date-time }
+        detail: { type: [string, "null"] }
+        actor:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+        target:
+          oneOf:
+            - $ref: "#/components/schemas/AccountRef"
+            - { type: "null" }
+    AuditPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
     Providers:
       type: object
       additionalProperties: false
@@ -648,3 +1000,241 @@ components:
             database: { $ref: "#/components/schemas/CheckState" }
             redis: { $ref: "#/components/schemas/CheckState" }
             worker: { $ref: "#/components/schemas/CheckState" }
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required: [file]
+      properties:
+        file: { type: string, format: binary, description: "CSV o XLSX, máximo 5 MB" }
+    UploadStatus:
+      type: string
+      enum: [queued, checking, accepted, rejected]
+      description: >
+        queued = en la cola · checking = el worker lo revisa · accepted = pasó la revisión profunda ·
+        rejected = no pasó (ver `rejectReason`).
+    UploadRejectReason:
+      type: string
+      enum: [zip_bomb, too_many_entries, range_too_large, corrupt, empty, worker_timeout]
+      description: >
+        Lista CERRADA; nunca texto libre del archivo ni del error interno. Los rechazos de la API (tamaño, firma,
+        macros) no llegan aquí: se responden 413/415 y no se guarda nada.
+    Upload:
+      type: object
+      additionalProperties: false
+      required: [id, kind, sizeBytes, status, rejectReason, createdAt, checkedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [csv, xlsx] }
+        displayName: { type: string, maxLength: 100, description: "Nombre original saneado, solo para mostrárselo a su dueño. Se omite si no hay." }
+        sizeBytes: { type: integer, minimum: 1, maximum: 5242880 }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        rejectReason:
+          oneOf:
+            - { $ref: "#/components/schemas/UploadRejectReason" }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        checkedAt: { type: [string, "null"], format: date-time }
+    UploadPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Upload" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    AdminUpload:
+      type: object
+      additionalProperties: false
+      required: [id, ownerEmail, kind, sizeBytes, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        ownerEmail: { $ref: "#/components/schemas/Email" }
+        kind: { type: string, enum: [csv, xlsx] }
+        sizeBytes: { type: integer }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        createdAt: { type: string, format: date-time }
+    AdminUploadPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminUpload" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    CreateAnalysisRequest:
+      type: object
+      additionalProperties: false
+      required: [uploadId]
+      properties:
+        uploadId: { type: string, format: uuid }
+    AnalysisStatus:
+      type: string
+      enum: [previewing, awaiting_mapping, queued, running, done, failed]
+      description: >
+        previewing = el worker lee el archivo · awaiting_mapping = espera que confirmes las columnas ·
+        queued/running = limpiando · done = hay informe y descargas · failed = ver `failReason`.
+    AnalysisFailReason:
+      type: string
+      enum: [unreadable, no_header, too_few_columns, mapping_invalid, nothing_left, worker_timeout]
+      description: >
+        Lista CERRADA; nunca texto del archivo ni del error interno. nothing_left = tras la limpieza no sobró
+        ninguna fila válida.
+    ColumnIndex:
+      type: integer
+      minimum: 0
+      maximum: 199
+      description: Posición de la columna en el archivo (la primera es 0). El archivo tiene máximo 200 columnas.
+    Mapping:
+      type: object
+      additionalProperties: false
+      required: [date, amount]
+      properties:
+        date: { $ref: "#/components/schemas/ColumnIndex" }
+        amount: { $ref: "#/components/schemas/ColumnIndex" }
+        quantity: { $ref: "#/components/schemas/ColumnIndex" }
+        product: { $ref: "#/components/schemas/ColumnIndex" }
+        branch: { $ref: "#/components/schemas/ColumnIndex" }
+        orderId: { $ref: "#/components/schemas/ColumnIndex" }
+        dateOrder:
+          type: string
+          enum: [auto, dmy, mdy, ymd]
+          default: auto
+          description: >
+            Orden de las fechas con diagonales (`03/04/2026`). `auto` decide por los datos; si todas las fechas
+            son ambiguas, usa día/mes/año (México) y lo avisa en el informe (`ambiguous_dates`).
+        decimalSeparator:
+          type: string
+          enum: [auto, ".", ","]
+          default: auto
+          description: Separador decimal de los importes (`1,234.50` o `1.234,50`).
+    PreviewColumn:
+      type: object
+      additionalProperties: false
+      required: [index, name, samples]
+      properties:
+        index: { $ref: "#/components/schemas/ColumnIndex" }
+        name: { type: string, maxLength: 60, description: "Encabezado del archivo, recortado y sin caracteres de control." }
+        samples:
+          type: array
+          maxItems: 5
+          items: { type: string, maxLength: 40 }
+          description: "Hasta 5 valores de ejemplo, recortados. Es DATO del archivo: se muestra como texto, nunca como HTML."
+    AnalysisPreview:
+      type: object
+      additionalProperties: false
+      required: [columns, rowCount, suggested]
+      properties:
+        columns: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/PreviewColumn" } }
+        rowCount: { type: integer, minimum: 0, maximum: 50000, description: Filas de datos (sin el encabezado). }
+        suggested:
+          description: El mapeo que el worker adivina por nombres y contenido. Solo es una sugerencia.
+          allOf:
+            - { $ref: "#/components/schemas/SuggestedMapping" }
+    SuggestedMapping:
+      type: object
+      additionalProperties: false
+      properties:
+        date: { $ref: "#/components/schemas/ColumnIndex" }
+        amount: { $ref: "#/components/schemas/ColumnIndex" }
+        quantity: { $ref: "#/components/schemas/ColumnIndex" }
+        product: { $ref: "#/components/schemas/ColumnIndex" }
+        branch: { $ref: "#/components/schemas/ColumnIndex" }
+        orderId: { $ref: "#/components/schemas/ColumnIndex" }
+    IssueCode:
+      type: string
+      enum:
+        - blank_row
+        - duplicate_row
+        - bad_date
+        - future_date
+        - bad_amount
+        - negative_amount
+        - zero_amount
+        - bad_quantity
+        - ambiguous_dates
+        - text_trimmed
+        - text_truncated
+      description: >
+        Lista CERRADA de problemas que la limpieza sabe reconocer. Los primeros cinco y `bad_quantity` TIRAN la fila;
+        `negative_amount`, `zero_amount` y `ambiguous_dates` solo AVISAN; `text_trimmed` y `text_truncated` son
+        arreglos menores (espacios, y texto de más de 200 caracteres). Nada se descarta sin quedar contado aquí.
+    QualityIssue:
+      type: object
+      additionalProperties: false
+      required: [code, count, dropped, examples]
+      properties:
+        code: { $ref: "#/components/schemas/IssueCode" }
+        count: { type: integer, minimum: 1 }
+        dropped: { type: boolean, description: "¿Las filas con este problema se descartaron?" }
+        examples:
+          type: array
+          maxItems: 5
+          items: { $ref: "#/components/schemas/IssueExample" }
+    IssueExample:
+      type: object
+      additionalProperties: false
+      required: [row, value]
+      properties:
+        row: { type: integer, minimum: 1, description: "Número de fila en el archivo (el encabezado es la 1)." }
+        value: { type: string, maxLength: 40, description: "Lo que decía la celda, recortado. Es DATO del archivo: solo texto." }
+    ColumnQuality:
+      type: object
+      additionalProperties: false
+      required: [field, filled, invalid]
+      properties:
+        field: { type: string, enum: [date, amount, quantity, product, branch, orderId] }
+        filled: { type: integer, minimum: 0, description: Filas leídas con algo en esta columna. }
+        invalid: { type: integer, minimum: 0, description: Filas con algo que no se pudo leer. }
+    QualityReport:
+      type: object
+      additionalProperties: false
+      required: [rowsRead, rowsKept, rowsDropped, dateFrom, dateTo, totalAmount, columns, issues]
+      properties:
+        rowsRead: { type: integer, minimum: 0 }
+        rowsKept: { type: integer, minimum: 0 }
+        rowsDropped: { type: integer, minimum: 0 }
+        dateFrom: { type: [string, "null"], format: date }
+        dateTo: { type: [string, "null"], format: date }
+        totalAmount:
+          type: string
+          pattern: "^-?[0-9]+\\.[0-9]{2}$"
+          description: Suma de los importes que se conservaron, como TEXTO decimal exacto (nunca un número de punto flotante).
+        columns: { type: array, items: { $ref: "#/components/schemas/ColumnQuality" } }
+        issues: { type: array, items: { $ref: "#/components/schemas/QualityIssue" } }
+    Analysis:
+      type: object
+      additionalProperties: false
+      required: [id, uploadId, status, failReason, preview, mapping, report, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        uploadId: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/AnalysisStatus" }
+        failReason:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisFailReason" }
+            - { type: "null" }
+        preview:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisPreview" }
+            - { type: "null" }
+        mapping:
+          oneOf:
+            - { $ref: "#/components/schemas/Mapping" }
+            - { type: "null" }
+        report:
+          oneOf:
+            - { $ref: "#/components/schemas/QualityReport" }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AnalysisPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Analysis" } }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }

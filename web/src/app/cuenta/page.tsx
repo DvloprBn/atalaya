@@ -46,7 +46,7 @@ export default function AccountPage() {
             <Radar size={240} label="Vista previa del radar de anomalías con datos de ejemplo" />
             <p className="muted">
               Aquí verás tus ventas en el radar: cada punto es un día y los que brillan en ámbar se salen de lo
-              normal. Llega con la parte de análisis (v0.8 en adelante).
+              normal. Hoy puedes subir tus ventas y limpiarlas en «Mis análisis»; los indicadores y el radar real llegan con v0.10.
             </p>
           </div>
         </section>

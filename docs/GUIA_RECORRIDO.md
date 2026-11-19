@@ -2,7 +2,7 @@
 
 > Una sola guía, en orden. Cada fase agrega su capítulo al final. Léela con el código abierto al lado: cada paso nombra el archivo exacto.
 >
-> **Capítulo actual: v0.1, el esqueleto.** Todavía no hay usuarios ni análisis; hay algo más importante: las cuatro piezas hablando entre sí, y la seguridad de base que todo lo demás va a heredar.
+> **Capítulo actual: v0.9, el análisis de ventas.** Los capítulos van en orden, del v0.1 (el esqueleto) al final de esta guía; cada uno nombra los archivos exactos que explica.
 
 ---
 
@@ -551,3 +551,212 @@ No hay que cambiar código: el compose usa lo que pongas en `.env` y, si no pone
 - **`sub`:** el identificador estable de la persona en Google. El correo puede cambiar; el `sub`, no.
 - **Login CSRF:** hacer que la víctima termine el login de otra persona.
 - **Defensa en capas:** que dos barreras distintas rechacen el mismo ataque.
+
+## Capítulo v0.7: la bitácora de seguridad
+
+> Lo nuevo: dos tablas (`security_events` y `audit_logs`), el aviso por correo cuando te roban una sesión, el recolector de reportes CSP y el panel **Seguridad del sistema** para el admin. Ataques y defensas en [`laboratorio/v0.7-bitacora.md`](laboratorio/v0.7-bitacora.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy     # tablas security_events y audit_logs
+```
+
+Entra como `admin@example.com` (`TestOnly123!`) y abre **Seguridad del sistema**. Para ver algo: falla un login a propósito, o mira la auditoría tras invitar a alguien.
+
+### 2. Dos registros, dos preguntas
+
+| | `security_events` | `audit_logs` |
+|---|---|---|
+| Responde | ¿Qué **intentaron** contra el sistema? | ¿Quién **hizo** qué (legítimamente)? |
+| Quién escribe | El propio sistema, ante hechos hostiles o raros | Una persona con sesión, al actuar |
+| Ejemplos | login fallido, cuenta bloqueada, refresh reusado, tope superado, CSP | rol cambiado, cuenta desactivada, 2FA activado |
+| Se escribe | Aparte; **si falla, se ignora** (nunca rompe la petición) | **Dentro de la transacción** de la acción; si falla, la acción tampoco ocurre |
+
+La diferencia del último renglón es la lección: una bitácora de ataques es *mejor esfuerzo* (que caiga no debe dejar a nadie sin entrar); una auditoría es *evidencia* (sin ella, la acción no cuenta).
+
+### 3. Qué NO se guarda, a propósito
+
+Ni contraseñas, ni correos de cuentas inexistentes, ni tokens, ni URLs completas. Del origen, solo un **HMAC** de la IP (con llave del servidor: una IP son 32 bits y un hash simple se invierte probándolas todas). El `detail` es un código corto como `bad_password` o `img-src host.example`. Si un dato no hace falta para entender el hecho, no se guarda: lo que no existe no se filtra.
+
+### 4. Recorrido
+
+| Archivo | Qué hace |
+|---|---|
+| `api/src/security/security-log.service.ts` | `record()` (tolerante a fallos, con dedupe) y la poda de 90 días |
+| `api/src/security/ip-hash.ts` | HMAC de la IP y recorte de texto |
+| `api/src/security/audit.ts` | `writeAudit(tx, …)`: la auditoría dentro de la transacción |
+| `api/src/security/logging-throttler.guard.ts` | El tope de siempre, más un renglón `rate_limited` con la **ruta registrada** |
+| `api/src/security/csp-report.ts` + `csp.controller.ts` | El recolector: dos formatos de reporte, solo directiva y host, siempre 204 |
+| `api/src/security/security-read.service.ts` | Lo que lee el panel, con la jerarquía aplicada (OWASP API1) |
+| `api/src/auth/sessions.service.ts` | Ante un robo: cierra, registra y **avisa por correo** |
+| `web/src/app/admin/seguridad/*` | Radar de 14 días + tabla equivalente, bitácora con filtro, auditoría |
+
+### 5. El radar
+
+Cada punto es un día, de los últimos 14. Más lejos del centro = más eventos. **Ámbar = día de ataque**: 10 o más eventos, o cualquier sesión robada (eso nunca es ruido). La tabla de al lado dice lo mismo con palabras: el radar solo no lo lee un lector de pantalla. Los reportes CSP **cuentan** como eventos: una página rota por una política mal puesta también hace «ruido».
+
+### 6. Lo que sigue pendiente (y por qué)
+
+- El **tope de peticiones** sigue en la memoria del proceso (S-6). Con una instancia basta; con varias habría que pasarlo a Redis. Se decide en v1.0, cuando se sabe cuántas instancias habrá.
+- La CSP sigue en **solo reporte**: ahora hay quien lea los reportes (S-2). Se pasa a bloqueo en v1.0, después de observar un tiempo.
+
+---
+
+## Capítulo v0.8: subir archivos sin confiar en nadie
+
+> Lo nuevo: la subida de CSV y `.xlsx`, una cola en Redis, un **worker** que los revisa por dentro, y las pantallas **Mis archivos** y **Archivos de las cuentas**. Ataques y defensas en [`laboratorio/v0.8-subida.md`](laboratorio/v0.8-subida.md).
+
+### 1. Preparar y probar
+
+```bash
+# Dos contraseñas nuevas en tu .env (el worker tiene su propio usuario de Redis y su propio rol de base):
+printf 'WORKER_REDIS_PASSWORD=%s\nWORKER_DB_PASSWORD=%s\n' $(openssl rand -hex 24) $(openssl rand -hex 24) >> .env
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # tabla uploads y el rol atalaya_worker (sin poder entrar todavía)
+docker compose up -d                                # el servicio db-roles le pone contraseña al rol y termina
+./scripts/permisos-worker.sh                        # comprueba que el worker solo puede lo que debe
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`) → **Mis archivos**. Sube un CSV: pasa de «en cola» a «aceptado» solo. Sube uno con solo el encabezado: queda «rechazado» con su motivo.
+
+### 2. Un archivo es entrada hostil que otra pieza va a abrir
+
+Toda la fase sale de una frase: **el archivo lo escribe un desconocido y lo va a abrir un programa que no controlamos.** De ahí tres decisiones:
+
+| Decisión | Qué evita |
+|---|---|
+| **Dos revisiones**: la API mira lo barato (firma, tamaño, forma) *antes de guardar*; el worker mira por dentro, aislado | Que el programa que atiende a todos abra archivos peligrosos |
+| **El tipo sale de los bytes**, no de la extensión ni del `Content-Type` (los dos los escribe quien sube) | Un `.xlsx` que es otra cosa; un `.csv` que es un ejecutable |
+| **El worker puede caer**: por eso solo toca el *estado* de los archivos | Que un archivo que explote al lector llegue a las cuentas, la bitácora o los demás archivos |
+
+### 3. El camino de un archivo
+
+1. **Navegador** (`web/src/app/archivos/upload-form.tsx`): una revisión *de cortesía* (extensión, 0 bytes, 5 MB). Ahorra una subida inútil; **no protege nada**.
+2. **API** (`api/src/uploads/`): `file-signature.ts` decide por bytes. Si pasa, guarda los bytes con un nombre **generado por el servidor** (`upload-storage.ts`), anota la fila (`uploads`, con el tope de 10 por cuenta bajo un candado) y encola **solo el id** en el Redis Stream `atalaya:uploads`. Responde **202**: la revisión profunda es asíncrona.
+3. **Worker** (`worker/atalaya_worker/`): toma el mensaje (`jobs.py`), pasa el archivo a «checking» en **una sola sentencia** (`store.py`), lo lee con cuidado y lo revisa (`review.py` → `inspect_xlsx.py` / `inspect_csv.py`). Deja `accepted` o `rejected` con un motivo de **lista cerrada**.
+4. **Pantalla**: se vuelve a leer sola, con pausas cada vez más largas, hasta que nada esté pendiente.
+
+### 4. Qué mira cada una
+
+| | API (antes de guardar) | Worker (ya encolado) |
+|---|---|---|
+| Tipo | Firma de bytes y extensión coherentes; sin `.xlsm` ni `vbaProject.bin` | Lo repite; además SHA-256 y tamaño contra lo guardado |
+| Tamaño | 5 MB, cortado mientras llega | 50 MB descomprimido y razón 100:1, contando bytes **reales** |
+| Forma | Un solo campo `file` | Entradas del zip, rutas, nombres repetidos; XML sin DTD (`defusedxml`); filas y columnas (50 000 × 200) |
+| Cuenta | 10 archivos, con candado | — |
+
+### 5. El radio de la explosión (S-1)
+
+El worker se conecta con **credenciales propias**:
+
+- **Postgres:** el rol `atalaya_worker` (migración `uploads_worker_role`) lee 7 columnas de `uploads` y actualiza 3. No ve cuentas, sesiones ni la bitácora. La migración lo crea **sin poder entrar** y sin contraseña (un secreto no vive en una migración); el servicio `db-roles` del compose le pone la contraseña de tu `.env`.
+- **Redis:** el usuario `worker` solo puede crear su grupo, leer y confirmar su cola y escribir su latido.
+- **Disco:** el volumen de archivos lo monta en **solo lectura**.
+
+`scripts/permisos-worker.sh` lo comprueba con las credenciales reales: 13 cosas de Postgres y 8 de Redis que deben fallar, y 4 que deben funcionar. Si alguien le da un permiso de más, el script cae.
+
+### 6. Un worker que muere a mitad
+
+El mensaje de la cola solo se confirma al terminar. Si el worker muere, el mensaje queda **pendiente** y al volver se ve otra vez. Ahí está la trampa: si el archivo fue *justo* lo que lo mató, reabrirlo lo mata otra vez, en bucle. Por eso `claim` dice si el archivo **ya estaba** en «checking»; en ese caso no se revisa, se cierra como `worker_timeout`. *Un archivo que ya mató al worker una vez no se reabre.*
+
+### 7. Lo que sigue pendiente (y por qué)
+
+- La contraseña de Redis sigue en los argumentos de `redis-server` (S-1): el archivo ACL y los secretos de Docker llegan en v1.0.
+- Un CSV en latin1 (típico de Excel en español) se rechaza. *(En v0.9 no se resolvió: sigue pendiente.)*
+- S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
+- Los archivos huérfanos (la API cae entre guardar y anotar) los barre la poda de v1.0.
+- El **análisis** de lo subido (lector de ventas, mapeo de columnas, informe de calidad) empieza en v0.9: hoy un archivo «aceptado» solo significa *«no es peligroso»*, no *«es útil»*.
+
+---
+
+## Capítulo v0.9: los datos de un desconocido, de vuelta a sus manos
+
+> Lo nuevo: el **análisis de ventas** en dos pasos (vista previa y confirmar las columnas → limpieza e informe de calidad), un **worker** que lee CSV y `.xlsx` con `openpyxl`, dos descargas en CSV y las pantallas **Mis análisis**. Ataques y defensas en [`laboratorio/v0.9-analisis.md`](laboratorio/v0.9-analisis.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build
+docker compose exec api npx prisma migrate deploy   # tabla analyses (y sus permisos para el worker)
+docker compose up -d                                # el volumen de resultados y el stream nuevo en el ACL de Redis
+./scripts/permisos-worker.sh                        # el worker solo puede lo que debe (38 comprobaciones)
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`), sube un CSV en **Mis archivos** y pulsa **Analizar**. Elige las columnas (ya vienen sugeridas), confirma, y mira el informe. Descarga el CSV limpio. Para ver el ataque de la fase, sube un archivo con un producto que diga `=HYPERLINK("http://x","y")` y comprueba que en el CSV sale con una comilla delante.
+
+### 2. La idea: lo que entra como texto puede salir como instrucción
+
+En v0.8 el peligro era que un archivo dañara al sistema. Aquí es **lo inverso**: el sistema lee datos que escribió un desconocido y los **devuelve** (en una pantalla, en un informe, en un CSV que abrirá una hoja de cálculo). Tres cosas se vuelven peligrosas por el camino de vuelta:
+
+| El dato… | Se vuelve… | La defensa |
+|---|---|---|
+| un nombre de columna con `<img onerror=…>` | **código en la pantalla** de otra persona (XSS) | React escapa todo; el worker recorta y limpia; nunca se pinta como HTML |
+| un producto con `=HYPERLINK(…)` | **una fórmula** que ejecuta Excel al abrir el CSV | un solo sanitizador antepone `'` |
+| una fecha `03/04/2026` | **un dato equivocado** sin que nadie lo note | se decide por la columna y, si se duda, el informe **avisa** |
+
+### 3. El camino de un análisis
+
+1. **Crear** (`api/src/analyses/analyses.service.ts`): solo un archivo mío y `accepted`; tope de 10 con candado; la API pone la llave de los resultados y encola **solo el id** en `atalaya:analyses`.
+2. **Vista previa** (worker, `analysis_jobs.py` → `tabular.py` + `preview.py`): lee el archivo ya verificado (tamaño y SHA-256), saca columnas, ejemplos y un mapeo **sugerido** (por nombre, y por contenido para fecha e importe). Estado: `awaiting_mapping`.
+3. **Mapeo** (`PUT /analyses/{id}/mapping`): la persona confirma. La API valida la **forma** (DTO) y el **sentido** (`mapping.ts`: columnas que existan en *ese* archivo y no repetidas). Un `UPDATE … WHERE status = 'awaiting_mapping'` decide quién gana una carrera.
+4. **Limpieza** (`cleaner.py`): las reglas de abajo. Escribe el informe en la base y dos CSV en el volumen de resultados (`export.py`).
+5. **Informe y descargas** (`web/src/app/analisis/[id]/`): las cifras, los problemas con ejemplos y los dos CSV.
+
+El estado lo dice **todo**: el mensaje de la cola solo trae un id, y el worker decide qué hacer según el estado (`previewing` → vista previa; `queued` → limpiar; `running` → ya lo tomaron).
+
+### 4. Las reglas de la limpieza
+
+**Nada se descarta sin quedar contado.** Cada fila tira por **una sola razón** (la primera que falle, en este orden) y siempre se cumple `rowsKept + rowsDropped == rowsRead`.
+
+| Problema | ¿Tira la fila? | Qué es |
+|---|---|---|
+| `blank_row` | sí | Fila vacía |
+| `bad_date` / `future_date` | sí | Fecha ilegible, o del futuro |
+| `bad_amount` / `bad_quantity` | sí | No es un número razonable |
+| `duplicate_row` | sí | **Idéntica en todo lo mapeado** (un pedido con varias líneas NO es duplicado) |
+| `negative_amount` / `zero_amount` | no | Devoluciones y ceros: se conservan, con aviso |
+| `ambiguous_dates` | no | Se leyó día/mes/año por no haber pistas |
+| `text_trimmed` / `text_truncated` | no | Espacios de más; texto de más de 200 caracteres |
+
+Las fechas y los importes se leen **mirando toda la columna**: un primer número mayor que 12 prueba día/mes; `1.234,50` y `12,5` votan por la coma como decimal. La persona puede fijar cualquiera de los dos. Los importes son `Decimal`, nunca `float`, y el total sale como **texto decimal exacto** (`"110.75"`).
+
+### 5. El sanitizador: una sola función, a propósito
+
+```python
+# worker/atalaya_worker/export.py
+def safe_cell(text: str) -> str:
+    return "'" + text if text.lstrip(_IGNORED_LEADING).startswith(_DANGEROUS_START) else text
+```
+
+- Neutraliza `=`, `+`, `-`, `@`, tabulador y retorno, **también tras espacios, saltos o NBSP** (algunas hojas los ignoran).
+- Solo toca el **texto**. Los importes, cantidades y fechas salen tipados: un `-50.00` legítimo no se rompe.
+- **Vive solo en el worker, y la API únicamente entrega los archivos.** Si la API generara CSV por su cuenta habría dos implementaciones de la misma regla de seguridad, y con el tiempo discreparían.
+- **El costo, dicho claro:** Excel, al abrir un CSV, **muestra** la comilla (no la toma por marca de texto). Se prefirió un dato con una comilla de más a una fórmula que se ejecuta. La pantalla lo avisa.
+
+### 6. Recorrido
+
+| Archivo | Qué hace |
+|---|---|
+| `api/src/analyses/mapping.ts` | La regla del mapeo, pura: columnas que existan y no repetidas |
+| `api/src/analyses/analyses.service.ts` | Crear, mapear, borrar y entregar; todo filtrado por dueño en la consulta |
+| `worker/atalaya_worker/tabular.py` | Lee CSV y `.xlsx`: lo único que toca `openpyxl` (solo lectura, solo valores) |
+| `worker/atalaya_worker/values.py` | Fechas e importes tal como los escriben las personas |
+| `worker/atalaya_worker/cleaner.py` | Las reglas de la limpieza y el informe |
+| `worker/atalaya_worker/export.py` | Los dos CSV y el sanitizador anti fórmulas |
+| `worker/atalaya_worker/analysis_jobs.py` | El trabajo de punta a punta: etapas, marca de «ya empezó», cierre limpio |
+| `web/src/app/analisis/[id]/mapping-form.tsx` | El formulario de mapeo completo, con la sugerencia elegida |
+| `web/src/app/analisis/[id]/report-view.tsx` | El informe de calidad |
+
+### 7. Un worker que muere a mitad, otra vez
+
+En v0.8 se resolvía con el estado `checking`. Aquí **el contrato no tiene un estado de «trabajando en la vista previa»**, así que cada etapa pone una marca en Redis con `SET … NX EX 900`. Si el mensaje **vuelve** y la marca ya existe, la ejecución anterior murió a mitad: se cierra como `worker_timeout` y no se reabre. Usa el `set` que el worker ya tenía permitido: no hizo falta ampliar su ACL. Y el **latido va en otro hilo**: analizar 50 000 filas puede pasar de los 30 s que vale el latido y `/api/health` diría «worker caído» mientras trabaja.
+
+### 8. Lo que sigue pendiente (y por qué)
+
+- Un CSV en **latin1** (lo típico de Excel en español) se sigue rechazando.
+- De un `.xlsx` solo se lee la **primera hoja** con datos.
+- Solo se exporta a CSV, no a `.xlsx`: así hay una sola superficie de inyección.
+- S-15: una pantalla con sesión válida manda a `/login` ante un 429 de `/auth/me`.
+- Los indicadores, el Pareto, las anomalías y el pronóstico empiezan en **v0.10**: hoy el informe dice *«qué tan limpios venían tus datos»*, no *«cómo va tu negocio»*. La limpieza se **repetirá** desde el archivo y el mapeo guardados (no se heredó un almacén intermedio).

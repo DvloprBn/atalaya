@@ -5,6 +5,9 @@ description = "Worker de análisis de Atalaya: lee la cola de Redis y calcula in
 requires-python = ">=3.14"
 license = "MIT"
 dependencies = [
+    "defusedxml>=0.7.1",
+    "openpyxl>=3.1.5",
+    "psycopg[binary]>=3.3.9",
     "redis>=8.1.0",
 ]
 
@@ -16,7 +19,7 @@ dev = [
 ]
 
 [tool.ruff]
-line-length = 110
+line-length = 130  # los comentarios en español (el porqué) son más largos
 target-version = "py314"
 
 [tool.ruff.lint]

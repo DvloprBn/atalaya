@@ -489,6 +489,243 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/security/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bitácora de seguridad (lo más reciente primero, 20 por página)
+         * @description Exige nivel admin (3). Del origen solo se muestra un prefijo del hash de la IP (para ver que dos eventos vienen del mismo lugar sin revelarla). El correo de una cuenta solo aparece si está por debajo de quien consulta (o es la suya); si no, `user` es null (OWASP API1).
+         */
+        get: operations["adminSecurityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/security/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Eventos por día de los últimos 14 días (alimenta el radar del panel) */
+        get: operations["adminSecuritySummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registro de auditoría (quién hizo qué sobre qué cuenta; 20 por página)
+         * @description Mismas reglas de visibilidad de correos que la bitácora.
+         */
+        get: operations["adminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/csp-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recolector de reportes de la política de contenido (CSP)
+         * @description Público a propósito (lo llama el navegador, sin sesión). Responde 204 sea o no un reporte válido (no se le dice nada a quien lo manda); solo un cuerpo que no es JSON de objeto o arreglo da 400, y uno de más de 16 KB, 413. Topado por IP, con un reporte repetido por minuto descartado, y se guarda solo la directiva y el HOST bloqueado (nunca rutas ni parámetros).
+         */
+        post: operations["cspReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mis archivos subidos (20 por página, los más nuevos primero)
+         * @description Solo los de quien pregunta. Nunca devuelve contenido, solo metadatos y estado.
+         */
+        get: operations["listUploads"];
+        put?: never;
+        /**
+         * Sube un archivo (CSV o XLSX) y lo encola para su revisión
+         * @description multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV ni XLSX, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415. **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
+         */
+        post: operations["createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Estado de un archivo mío
+         * @description 404 si no existe O si es de otra cuenta (nunca 403, para no confirmar que existe), también para un admin.
+         */
+        get: operations["getUpload"];
+        put?: never;
+        post?: never;
+        /**
+         * Borra un archivo mío (el original y sus resultados)
+         * @description Mismo 404 que `getUpload`. Si el worker lo está revisando, se marca y el worker descarta el resultado.
+         */
+        delete: operations["deleteUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metadatos de los archivos de las cuentas de nivel menor al tuyo (20 por página)
+         * @description Exige nivel admin (3) o más. Solo dueño, tamaño, tipo, estado y fecha: el admin administra cuentas, NO lee datos (nunca hay ruta para el contenido ni para el nombre original). Misma regla de visibilidad que `adminListUsers`.
+         */
+        get: operations["adminListUploads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mis análisis (20 por página, los más nuevos primero) */
+        get: operations["listAnalyses"];
+        put?: never;
+        /**
+         * Empieza el análisis de un archivo mío ya aceptado
+         * @description Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido); el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`. 404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay 10 análisis en la cuenta.
+         */
+        post: operations["createAnalysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Un análisis mío (estado, vista previa, mapeo e informe de calidad)
+         * @description 404 si no existe O es de otra cuenta (también para un admin).
+         */
+        get: operations["getAnalysis"];
+        put?: never;
+        post?: never;
+        /** Borra un análisis mío y sus resultados (el archivo subido no se toca) */
+        delete: operations["deleteAnalysis"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Confirma qué columna es cada campo y lanza la limpieza
+         * @description Paso 2 de 2. Solo con el análisis en `awaiting_mapping` (409 si no). `date` y `amount` son obligatorios; dos campos no pueden apuntar a la misma columna (400); un índice fuera de la vista previa, tampoco (400). Responde 202: el worker limpia el archivo y deja el informe de calidad en `getAnalysis`.
+         */
+        put: operations["putAnalysisMapping"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyses/{id}/export/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+                /** @description `clean` = los datos ya limpios; `report` = el informe de calidad. */
+                kind: "clean" | "report";
+            };
+            cookie?: never;
+        };
+        /**
+         * Descarga un resultado como CSV
+         * @description Solo con el análisis en `done` (409 si no). **Anti inyección de fórmulas:** toda celda de TEXTO que empiece con `=`, `+`, `-`, `@`, tabulador o retorno de carro sale precedida de una comilla simple (`'`), para que Excel o Calc la lean como texto y no como fórmula. Las columnas numéricas y de fecha salen tipadas, sin tocar. Se entrega como adjunto, con tipo `text/csv` y UTF-8 con BOM (Excel en español lo abre bien).
+         */
+        get: operations["exportAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -602,6 +839,55 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        /** @enum {string} */
+        SecurityEventType: "login_failed" | "login_locked" | "two_factor_failed" | "refresh_reuse" | "google_rejected" | "rate_limited" | "csp_violation";
+        AccountRef: {
+            email: string;
+        };
+        SecurityEvent: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["SecurityEventType"];
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Primeros 8 caracteres del hash de la IP */
+            source: string | null;
+            /** @description Un código corto (p. ej. bad_password) */
+            detail: string | null;
+            user: components["schemas"]["AccountRef"] | null;
+        };
+        SecurityEventPage: {
+            items: components["schemas"]["SecurityEvent"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
+        SecuritySummary: {
+            days: {
+                /** Format: date */
+                date: string;
+                total: number;
+                byType: {
+                    [key: string]: number;
+                };
+            }[];
+        };
+        AuditEntry: {
+            /** Format: uuid */
+            id: string;
+            action: string;
+            /** Format: date-time */
+            createdAt: string;
+            detail: string | null;
+            actor: components["schemas"]["AccountRef"] | null;
+            target: components["schemas"]["AccountRef"] | null;
+        };
+        AuditPage: {
+            items: components["schemas"]["AuditEntry"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
         Providers: {
             google: boolean;
         };
@@ -623,6 +909,179 @@ export interface components {
                 redis: components["schemas"]["CheckState"];
                 worker: components["schemas"]["CheckState"];
             };
+        };
+        UploadRequest: {
+            /**
+             * Format: binary
+             * @description CSV o XLSX, máximo 5 MB
+             */
+            file: string;
+        };
+        /**
+         * @description queued = en la cola · checking = el worker lo revisa · accepted = pasó la revisión profunda · rejected = no pasó (ver `rejectReason`).
+         * @enum {string}
+         */
+        UploadStatus: "queued" | "checking" | "accepted" | "rejected";
+        /**
+         * @description Lista CERRADA; nunca texto libre del archivo ni del error interno. Los rechazos de la API (tamaño, firma, macros) no llegan aquí: se responden 413/415 y no se guarda nada.
+         * @enum {string}
+         */
+        UploadRejectReason: "zip_bomb" | "too_many_entries" | "range_too_large" | "corrupt" | "empty" | "worker_timeout";
+        Upload: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "csv" | "xlsx";
+            /** @description Nombre original saneado, solo para mostrárselo a su dueño. Se omite si no hay. */
+            displayName?: string;
+            sizeBytes: number;
+            status: components["schemas"]["UploadStatus"];
+            rejectReason: components["schemas"]["UploadRejectReason"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            checkedAt: string | null;
+        };
+        UploadPage: {
+            items: components["schemas"]["Upload"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
+        AdminUpload: {
+            /** Format: uuid */
+            id: string;
+            ownerEmail: components["schemas"]["Email"];
+            /** @enum {string} */
+            kind: "csv" | "xlsx";
+            sizeBytes: number;
+            status: components["schemas"]["UploadStatus"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminUploadPage: {
+            items: components["schemas"]["AdminUpload"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
+        CreateAnalysisRequest: {
+            /** Format: uuid */
+            uploadId: string;
+        };
+        /**
+         * @description previewing = el worker lee el archivo · awaiting_mapping = espera que confirmes las columnas · queued/running = limpiando · done = hay informe y descargas · failed = ver `failReason`.
+         * @enum {string}
+         */
+        AnalysisStatus: "previewing" | "awaiting_mapping" | "queued" | "running" | "done" | "failed";
+        /**
+         * @description Lista CERRADA; nunca texto del archivo ni del error interno. nothing_left = tras la limpieza no sobró ninguna fila válida.
+         * @enum {string}
+         */
+        AnalysisFailReason: "unreadable" | "no_header" | "too_few_columns" | "mapping_invalid" | "nothing_left" | "worker_timeout";
+        /** @description Posición de la columna en el archivo (la primera es 0). El archivo tiene máximo 200 columnas. */
+        ColumnIndex: number;
+        Mapping: {
+            date: components["schemas"]["ColumnIndex"];
+            amount: components["schemas"]["ColumnIndex"];
+            quantity?: components["schemas"]["ColumnIndex"];
+            product?: components["schemas"]["ColumnIndex"];
+            branch?: components["schemas"]["ColumnIndex"];
+            orderId?: components["schemas"]["ColumnIndex"];
+            /**
+             * @description Orden de las fechas con diagonales (`03/04/2026`). `auto` decide por los datos; si todas las fechas son ambiguas, usa día/mes/año (México) y lo avisa en el informe (`ambiguous_dates`).
+             * @default auto
+             * @enum {string}
+             */
+            dateOrder: "auto" | "dmy" | "mdy" | "ymd";
+            /**
+             * @description Separador decimal de los importes (`1,234.50` o `1.234,50`).
+             * @default auto
+             * @enum {string}
+             */
+            decimalSeparator: "auto" | "." | ",";
+        };
+        PreviewColumn: {
+            index: components["schemas"]["ColumnIndex"];
+            /** @description Encabezado del archivo, recortado y sin caracteres de control. */
+            name: string;
+            /** @description Hasta 5 valores de ejemplo, recortados. Es DATO del archivo: se muestra como texto, nunca como HTML. */
+            samples: string[];
+        };
+        AnalysisPreview: {
+            columns: components["schemas"]["PreviewColumn"][];
+            /** @description Filas de datos (sin el encabezado). */
+            rowCount: number;
+            /** @description El mapeo que el worker adivina por nombres y contenido. Solo es una sugerencia. */
+            suggested: components["schemas"]["SuggestedMapping"];
+        };
+        SuggestedMapping: {
+            date?: components["schemas"]["ColumnIndex"];
+            amount?: components["schemas"]["ColumnIndex"];
+            quantity?: components["schemas"]["ColumnIndex"];
+            product?: components["schemas"]["ColumnIndex"];
+            branch?: components["schemas"]["ColumnIndex"];
+            orderId?: components["schemas"]["ColumnIndex"];
+        };
+        /**
+         * @description Lista CERRADA de problemas que la limpieza sabe reconocer. Los primeros cinco y `bad_quantity` TIRAN la fila; `negative_amount`, `zero_amount` y `ambiguous_dates` solo AVISAN; `text_trimmed` y `text_truncated` son arreglos menores (espacios, y texto de más de 200 caracteres). Nada se descarta sin quedar contado aquí.
+         * @enum {string}
+         */
+        IssueCode: "blank_row" | "duplicate_row" | "bad_date" | "future_date" | "bad_amount" | "negative_amount" | "zero_amount" | "bad_quantity" | "ambiguous_dates" | "text_trimmed" | "text_truncated";
+        QualityIssue: {
+            code: components["schemas"]["IssueCode"];
+            count: number;
+            /** @description ¿Las filas con este problema se descartaron? */
+            dropped: boolean;
+            examples: components["schemas"]["IssueExample"][];
+        };
+        IssueExample: {
+            /** @description Número de fila en el archivo (el encabezado es la 1). */
+            row: number;
+            /** @description Lo que decía la celda, recortado. Es DATO del archivo: solo texto. */
+            value: string;
+        };
+        ColumnQuality: {
+            /** @enum {string} */
+            field: "date" | "amount" | "quantity" | "product" | "branch" | "orderId";
+            /** @description Filas leídas con algo en esta columna. */
+            filled: number;
+            /** @description Filas con algo que no se pudo leer. */
+            invalid: number;
+        };
+        QualityReport: {
+            rowsRead: number;
+            rowsKept: number;
+            rowsDropped: number;
+            /** Format: date */
+            dateFrom: string | null;
+            /** Format: date */
+            dateTo: string | null;
+            /** @description Suma de los importes que se conservaron, como TEXTO decimal exacto (nunca un número de punto flotante). */
+            totalAmount: string;
+            columns: components["schemas"]["ColumnQuality"][];
+            issues: components["schemas"]["QualityIssue"][];
+        };
+        Analysis: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            uploadId: string;
+            status: components["schemas"]["AnalysisStatus"];
+            failReason: components["schemas"]["AnalysisFailReason"] | null;
+            preview: components["schemas"]["AnalysisPreview"] | null;
+            mapping: components["schemas"]["Mapping"] | null;
+            report: components["schemas"]["QualityReport"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AnalysisPage: {
+            items: components["schemas"]["Analysis"][];
+            page: number;
+            pageSize: number;
+            total: number;
         };
     };
     responses: {
@@ -673,6 +1132,8 @@ export interface components {
         };
     };
     parameters: {
+        AnalysisId: string;
+        UploadId: string;
         UserId: string;
     };
     requestBodies: {
@@ -1223,6 +1684,388 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["AdminUser"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    adminSecurityEvents: {
+        parameters: {
+            query?: {
+                type?: components["schemas"]["SecurityEventType"];
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de eventos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityEventPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminSecuritySummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Un renglón por día, también los días sin eventos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecuritySummary"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminAudit: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de entradas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    cspReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/csp-report": Record<string, never>;
+                "application/reports+json": Record<string, never>[];
+            };
+        };
+        responses: {
+            /** @description Recibido */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listUploads: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de archivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    createUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Aceptado y en cola (`status` = queued) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            413: components["responses"]["Error"];
+            415: components["responses"]["Error"];
+            /** @description Se superó el tope de peticiones */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    adminListUploads: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de metadatos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUploadPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listAnalyses: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Una página de análisis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    createAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Aceptado; el worker prepara la vista previa (`status` = previewing) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            /** @description Se superó el tope de peticiones */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El análisis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    putAnalysisMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Mapping"];
+            };
+        };
+        responses: {
+            /** @description Aceptado; en cola (`status` = queued) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analysis"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    exportAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AnalysisId"];
+                /** @description `clean` = los datos ya limpios; `report` = el informe de calidad. */
+                kind: "clean" | "report";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El CSV */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };

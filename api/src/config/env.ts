@@ -30,6 +30,10 @@ export interface Env {
   totpEncryptionKey: string;
   /** Multiplica los topes por IP de las rutas de acceso. 1 en producción (ver common/http/throttle.ts). */
   throttleScale: number;
+  /** Carpeta de los archivos subidos (volumen compartido con el worker, que la monta en solo lectura). */
+  uploadDir: string;
+  /** Carpeta de los resultados de los análisis (CSV). El worker escribe; la API los entrega y los borra. */
+  resultsDir: string;
   /** null = el login con Google no está configurado (las rutas responden 404). */
   oauth: OAuthConfig | null;
 }
@@ -49,6 +53,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     mailFrom: required(source, 'MAIL_FROM'),
     totpEncryptionKey: required(source, 'TOTP_ENCRYPTION_KEY'),
     throttleScale: Number(source.THROTTLE_SCALE ?? 1),
+    uploadDir: source.UPLOAD_DIR ?? '/data/uploads',
+    resultsDir: source.RESULTS_DIR ?? '/data/results',
     oauth: loadOAuth(source),
   };
   if (!Number.isInteger(env.port) || env.port <= 0) {
@@ -66,6 +72,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (source.NODE_ENV === 'production' && env.throttleScale !== 1) {
     throw new Error('En producción THROTTLE_SCALE debe ser 1: los topes por IP no se aflojan');
   }
+  if (!env.uploadDir.startsWith('/')) throw new Error('UPLOAD_DIR debe ser una ruta absoluta');
+  if (!env.resultsDir.startsWith('/')) throw new Error('RESULTS_DIR debe ser una ruta absoluta');
   // Solo el origen (esquema + host + puerto), sin ruta ni barra final: se compara tal cual contra Origin.
   if (new URL(env.appOrigin).origin !== env.appOrigin) {
     throw new Error('APP_ORIGIN debe ser un origen sin ruta, p. ej. http://localhost:3070');

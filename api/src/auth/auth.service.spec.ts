@@ -1,6 +1,7 @@
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService } from './auth.service.js';
 import { hashPassword } from './passwords.js';
+import type { SecurityLog } from '../security/security-log.service.js';
 import type { RateLimits } from './rate-limits.js';
 import type { SessionsService } from './sessions.service.js';
 import type { SecondFactorService } from './two-factor/second-factor.service.js';
@@ -24,13 +25,15 @@ async function build({ exists = true, disabled = false, locked = false, twoFacto
   };
   const sessions = { start: vi.fn().mockResolvedValue(TOKENS) };
   const secondFactor = { isEnabled: vi.fn().mockResolvedValue(twoFactor), startChallenge: vi.fn().mockResolvedValue('reto') };
+  const security = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new AuthService(
     prisma as unknown as PrismaService,
     limits as unknown as RateLimits,
     sessions as unknown as SessionsService,
     secondFactor as unknown as SecondFactorService,
+    security as unknown as SecurityLog,
   );
-  return { service, prisma, limits, sessions, secondFactor };
+  return { service, prisma, limits, sessions, secondFactor, security };
 }
 
 describe('AuthService.login', () => {
@@ -62,6 +65,29 @@ describe('AuthService.login', () => {
       expect(limits.recordLoginFailure).toHaveBeenCalledWith('ana@example.com');
       expect(sessions.start).not.toHaveBeenCalled();
     }
+  });
+
+  it('cada fallo deja un renglón en la bitácora con su motivo real (que el visitante nunca ve)', async () => {
+    const motivos: [{ password?: string; exists?: boolean; disabled?: boolean }, string][] = [
+      [{ password: 'mala' }, 'bad_password'], [{ exists: false }, 'unknown_account'], [{ disabled: true }, 'disabled'],
+    ];
+    for (const [scenario, detail] of motivos) {
+      const { service, security } = await build(scenario);
+      await service.login('ana@example.com', scenario.password ?? PASSWORD, '203.0.113.9');
+      expect(security.record).toHaveBeenCalledWith('login_failed', expect.objectContaining({ detail, ip: '203.0.113.9' }));
+    }
+  });
+
+  it('un login correcto no escribe nada en la bitácora', async () => {
+    const { service, security } = await build();
+    await service.login('ana@example.com', PASSWORD);
+    expect(security.record).not.toHaveBeenCalled();
+  });
+
+  it('bloqueada: queda registrada con dedupe (un atacante insistente no llena la bitácora)', async () => {
+    const { service, security } = await build({ locked: true });
+    await service.login('ana@example.com', PASSWORD, '203.0.113.9');
+    expect(security.record).toHaveBeenCalledWith('login_locked', { ip: '203.0.113.9', dedupe: true });
   });
 
   it('bloqueada por intentos: ni la contraseña correcta entra, y ni siquiera consulta la base', async () => {

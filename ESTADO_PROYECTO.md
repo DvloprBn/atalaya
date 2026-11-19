@@ -2,35 +2,42 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-17**
+Última actualización: **2026-11-18**
 
 ---
 
 ## 1. Dónde estamos
-### ESTADO VIVO (único vigente) — reescrito 2026-11-17
+### ESTADO VIVO (único vigente) — reescrito 2026-11-18
 
-**Fase actual:** `v0.6` (entrar con Google), **construida y verificada** en la rama `fase/v0.6-google`. **Sin comitear** el trabajo de la fase (solo el commit de documentación del cierre de v0.5). `v0.1` a `v0.5` cerradas (etiqueta `v0.5` en `c35012f`).
+**Fase actual:** `v0.9` **construida, verificada, comiteada y subida** en `fase/v0.9-analisis`. Las ramas están **apiladas** y ninguna ha pasado por GitHub: `main` (v0.6) ← `fase/v0.7-bitacora` ← `fase/v0.8-subida` ← `fase/v0.9-analisis` (9 commits por delante de `main`). Falta, en orden: fusionar v0.7, luego v0.8, luego v0.9 (cada PR con su CI y su etiqueta). Siguiente fase: `v0.10` (indicadores, Pareto, anomalías y pronóstico; dinero en `Decimal` y zona horaria).
 
-**Qué hay en v0.6 (verificado el 2026-11-17 contra el sistema vivo):**
-- Opción A elegida por el dueño: todo contra un **servidor OAuth falso** local (`mock-idp/`); el cliente real de Google se agrega después con seis variables `OAUTH_*`.
-- Authorization Code + PKCE (vector oficial del RFC 7636) + `state` + `nonce`; el intento vive en Redis (10 min, un solo uso, solo hashes) atado al navegador por una cookie `__Host-` `SameSite=Lax`.
-- `id_token` verificado a mano (93 líneas): RS256 fijo, `kid`, firma, emisor, audiencia, vigencia, `nonce` y `email_verified`.
-- Vinculación por `sub` (tabla `oauth_identities`, con CHECKs y unicidades probados): vincula solo cuentas ya verificadas y avisa por correo; cuenta nueva = `usuario` sin contraseña. El 2FA no se salta. Una cuenta solo-Google recibe un `409` claro al intentar activar el 2FA.
-- Consumo seguro del proveedor: sin redirecciones, 5 s, 64 KB, solo JSON; en producción solo HTTPS (verificado en `env.spec`).
-- Pruebas: unitarias 172 · ataques e2e 53 (25 de Google, en dos archivos) · Chrome 11 · smoke 25 · worker 2. Simulación del CI con base nueva: todo en verde.
-- Fallas plantadas: sin la cookie del intento cayeron 2 pruebas (login CSRF); sin el nonce, 2; sin `email_verified`, 2. **Dos fallas (algoritmo y «ya tiene otra cuenta de Google») no las vio la suite viva** porque otra capa también las rechaza (RS256 fijo; restricción única de la base): las unitarias sí cayeron (3 y 1). Se documentó como defensa en capas.
+**⚠ Una discrepancia sin resolver:** el dueño dijo (2026-11-18) haber fusionado v0.7, pero **GitHub no lo muestra**: `main` sigue en el merge de v0.6 (`abe5bcc`) y no existe la etiqueta `v0.7`. Hay que mirar si el PR quedó fusionado o solo aprobado, o si se fusionó en otra rama.
 
-**Siguiente paso:**
-1. El dueño revisa (guía capítulo v0.6 y `docs/laboratorio/v0.6-google.md`; prueba «Continuar con Google» en <http://localhost:3070/login>) y pide el commit.
-2. Push, PR, CI, fusión y etiqueta `v0.6`.
-3. Arranca `v0.7` (bitácoras de seguridad y panel).
+**Qué hay en v0.8 (subida segura):** `POST/GET /uploads` con el tipo por **firma de bytes**, sin `.xlsm` ni macros, 5 MB cortado mientras llega, tope de 10 por cuenta con candado, 404 en lo ajeno; cola en Redis Stream (solo el id); worker con **revisión profunda** (bomba zip, entradas, zip slip, rango gigante, XXE con `defusedxml`, SHA-256, `O_NOFOLLOW`) y rol de base y usuario de Redis **mínimos** (S-1 del worker cerrado); pantallas `/archivos` y `/admin/archivos` (solo metadatos).
 
-**Bloqueos:** ninguno. Probar con Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
+**Qué hay en v0.9 (análisis de ventas):**
+- **Dos pasos:** crear → el worker deja una **vista previa** (columnas, ejemplos, mapeo sugerido) → la persona confirma las columnas → el worker limpia y deja el informe. Tabla `analyses` con CHECK (estados y motivos cerrados, motivo sii falló, informe sii terminó, etapas, JSON objeto) y permisos por columna para el worker.
+- **Limpieza** (`worker/atalaya_worker/cleaner.py`): reglas cerradas, nada se descarta sin contarse, una razón por fila y `rowsKept + rowsDropped == rowsRead`; fechas e importes decididos por **toda la columna**, avisando lo ambiguo; dinero en `Decimal`; duplicado = fila idéntica en todo lo mapeado.
+- **Exportación** a dos CSV con **un solo sanitizador** anti inyección de fórmulas (`export.safe_cell`), solo sobre el texto; la API solo entrega.
+- **Worker:** `openpyxl` en solo lectura y solo valores; latido en un hilo aparte; una etapa que ya mató al worker no se reabre (marca `SET NX` en Redis).
+- **Pantallas:** `/analisis` y `/analisis/[id]` (formulario de mapeo completo, informe de calidad, descargas) y botón Analizar en «Mis archivos».
+- **Pruebas (todas verdes el 2026-11-18):** API unitarias 236 · ataques e2e 109 (11 de análisis con el worker **real**) · Chrome 27 · worker 171 · `scripts/permisos-worker.sh` 38 · smoke en orden. Fallas plantadas detectadas: sin el candado de subidas (11 en vez de 10), un permiso de más al rol del worker (dos veces) y el sanitizador desactivado (6 celdas peligrosas).
+- Laboratorios de 19 (v0.8) y 33 (v0.9) fichas, con lo que **no** está cubierto, y capítulos v0.8 y v0.9 de la guía.
+
+**Siguiente paso:** resolver lo de v0.7 en GitHub; abrir los PR en cadena (no hay `gh`: desde la web) y mirar el CI, que **es la primera vez que corre** con: las dos contraseñas del worker (`WORKER_REDIS_PASSWORD`, `WORKER_DB_PASSWORD`), el volumen de subidas y el de resultados, `permisos-worker.sh`, `openpyxl` en la imagen del worker y `THROTTLE_SCALE` 10. Luego las etiquetas `v0.7`, `v0.8` y `v0.9`, y `v0.10` (contrato primero).
+
+**Bloqueos:** ninguno técnico. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
+**Pendientes nuevos de v0.8 y v0.9** (detalle en `PENDIENTES.md`): S-15 (un 429 o 5xx de `/me` manda a `/login`; debe redirigir solo ante 401); CSV en **latin1** (se rechaza; **no** se resolvió en v0.9, sin fase asignada); de un `.xlsx` solo se lee la primera hoja; la contraseña de Redis sigue en los argumentos (S-1, v1.0).
+**Ojo al probar:** las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas de e2e o de Chrome hay que reiniciar la API (`docker compose restart api`), y `smoke.sh` se corre una vez por minuto (él mismo agota el cupo de la IP). Todo `docker compose` necesita en `.env` `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD` (ya están en el `.env` del dueño).
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-18 | v0.9 construida, verificada, comiteada (3 commits) y subida (`fase/v0.9-analisis`): análisis de ventas en dos pasos, worker con `openpyxl`, limpieza con reglas cerradas y `Decimal`, exportación con sanitizador anti fórmulas, pantallas, laboratorio de 33 fichas y capítulo v0.9. Sin PR ni CI. Pendiente sin resolver: v0.7 no aparece fusionada en GitHub. |
+| 2026-11-18 | v0.8 construida, verificada, comiteada y subida (`fase/v0.8-subida`): subida segura, cola, worker con rol de base y usuario de Redis mínimos, pantallas de archivos, laboratorio de 19 fichas, capítulo v0.8 y `permisos-worker.sh`. Anotado S-15. Sin PR ni CI todavía. |
+| 2026-11-18 | v0.7 construida, verificada y comiteada en su rama: bitácora de seguridad y auditoría, aviso de robo de sesión, recolector CSP y panel «Seguridad del sistema»; laboratorio de 12 fichas y capítulo v0.7. |
+| 2026-11-17 | PR #6 fusionado con el CI 5/5; etiqueta `v0.6` en `abe5bcc`. v0.6 cerrada. |
 | 2026-11-17 | v0.6 construida y verificada (sin comitear): login con Google (Code + PKCE + state + nonce) contra un servidor OAuth falso, id_token verificado a mano, vinculación por sub, 25 pruebas de ataque; laboratorio de 8 secciones y capítulo v0.6. |
 | 2026-11-17 | PR #5 fusionado con el CI 5/5; etiqueta `v0.5` en `c35012f`. v0.5 cerrada. |
 | 2026-11-17 | v0.5 construida y verificada (sin comitear): 2FA TOTP a mano, secreto cifrado, reto de un solo uso, códigos de recuperación, pantalla de seguridad; laboratorio de 11 ataques y capítulo v0.5. |

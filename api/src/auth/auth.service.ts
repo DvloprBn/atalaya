@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import type { SessionCookies } from './cookies.js';
 import { verifyPassword } from './passwords.js';
 import { RateLimits } from './rate-limits.js';
+import { SecurityLog } from '../security/security-log.service.js';
 import { SecondFactorService } from './two-factor/second-factor.service.js';
 import { SessionsService } from './sessions.service.js';
 
@@ -23,17 +24,20 @@ export class AuthService {
     private readonly limits: RateLimits,
     private readonly sessions: SessionsService,
     private readonly secondFactor: SecondFactorService,
+    private readonly security: SecurityLog,
   ) {}
 
   /**
    * null = "correo o contraseña incorrectos", sin decir cuál: cuenta inexistente,
    * contraseña mala, cuenta desactivada o bloqueada por intentos se ven IGUAL.
    */
-  async login(email: string, password: string): Promise<LoginResult | null> {
+  async login(email: string, password: string, ip?: string): Promise<LoginResult | null> {
     // 1. Tope por cuenta ANTES de tocar la base (lección 63, regla 1). Aun bloqueada,
     //    se hace el mismo trabajo de Argon2 para que el tiempo no delate el bloqueo.
     if (await this.limits.isLoginLocked(email)) {
       await verifyPassword(null, password);
+      // Un atacante que sigue golpeando una cuenta bloqueada no debe llenar la bitácora: una línea por minuto y origen.
+      await this.security.record('login_locked', { ip, dedupe: true });
       return null;
     }
 
@@ -46,6 +50,8 @@ export class AuthService {
 
     if (!user || !valid || user.disabledAt) {
       await this.limits.recordLoginFailure(email);
+      // El motivo real queda SOLO en la bitácora del admin; a quien intenta se le dice siempre lo mismo.
+      await this.security.record('login_failed', { userId: user?.id, ip, detail: !user ? 'unknown_account' : user.disabledAt ? 'disabled' : 'bad_password' });
       return null;
     }
 

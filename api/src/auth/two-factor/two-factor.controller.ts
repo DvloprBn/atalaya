@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, Post, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Public } from '../../common/auth/public.decorator.js';
 import { scaled } from '../../common/http/throttle.js';
 import { setSessionCookies } from '../cookies.js';
@@ -60,8 +60,8 @@ export class TwoFactorController {
   @Throttle({ default: { limit: scaled(10), ttl: MIN } })
   @Post('verify')
   @HttpCode(200)
-  async verify(@Body() dto: VerifyDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.second.verifyLogin(dto.challenge, dto.code);
+  async verify(@Body() dto: VerifyDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.second.verifyLogin(dto.challenge, dto.code, req.ip);
     if (!result) throw new UnauthorizedException('Código incorrecto o vencido');
     setSessionCookies(res, result.tokens);
     return { user: result.user };

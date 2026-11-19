@@ -12,6 +12,13 @@ export type Providers = components['schemas']['Providers'];
 export type TwoFactorStatus = components['schemas']['TwoFactorStatus'];
 export type TwoFactorSetup = components['schemas']['TwoFactorSetup'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
+export type Upload = components['schemas']['Upload'];
+export type UploadPage = components['schemas']['UploadPage'];
+export type AdminUploadPage = components['schemas']['AdminUploadPage'];
+export type Analysis = components['schemas']['Analysis'];
+export type AnalysisPage = components['schemas']['AnalysisPage'];
+export type AnalysisMapping = components['schemas']['Mapping'];
+export type QualityReport = components['schemas']['QualityReport'];
 type ApiError = components['schemas']['Error'];
 
 export interface ApiResult<T> {
@@ -32,7 +39,7 @@ const NEEDS_SESSION = (path: string) =>
 
 let refreshing: Promise<boolean> | null = null;
 
-async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<ApiResult<T>> {
+async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<ApiResult<T>> {
   let res = await send(method, path, body);
   // El acceso dura 10 min. Si venció (401), se pide UNA renovación y se repite una vez.
   // Varias llamadas a la vez comparten la misma renovación: si cada una renovara por
@@ -50,15 +57,21 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
+  delete: <T>(path: string) => request<T>('DELETE', path),
+  /** Subida de un archivo (multipart). El navegador pone el content-type con su límite; NO se fija a mano. */
+  upload: <T>(path: string, form: FormData) => request<T>('POST', path, form),
 };
 
 function send(method: string, path: string, body?: unknown): Promise<Response> {
+  const isForm = body instanceof FormData;
   return fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined || isForm ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     credentials: 'same-origin',
-    signal: AbortSignal.timeout(10_000), // toda llamada de red lleva tiempo límite
+    // Toda llamada de red lleva tiempo límite; una subida de hasta 5 MB necesita más que un formulario.
+    signal: AbortSignal.timeout(isForm ? 30_000 : 10_000),
   });
 }
 
@@ -72,6 +85,7 @@ async function toResult<T>(res: Response): Promise<ApiResult<T>> {
 }
 
 function errorMessage(status: number, error?: ApiError): string {
+  if (status === 413) return 'El archivo pasa de 5 MB.';
   if (status === 429) return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
   if (status >= 500 || !error) return 'Algo salió mal. Intenta de nuevo.';
   return Array.isArray(error.message) ? error.message.join('. ') : error.message;
