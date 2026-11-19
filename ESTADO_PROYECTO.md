@@ -2,7 +2,7 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-19** (v0.11 cerrada: PR #9 fusionado, etiqueta puesta)
+Última actualización: **2026-11-19** (v0.11 cerrada y S-15 resuelto, ambos en `main`)
 
 ---
 
@@ -17,7 +17,7 @@
 - **Defecto atrapado por la prueba:** la limpieza ignoraba en silencio los dos códigos nuevos (la lista cerrada vive en el contrato y en `cleaner.py`); corregido y con una prueba que obliga a que ambas coincidan.
 **Pruebas (todas verdes hoy):** worker **312** (con catálogo XXE, ZIP y tabla virtual) · API unitarias **283** · e2e **132** (11 archivos; 7 nuevas de CFDI contra el worker real) · `permisos-worker.sh` y `smoke.sh` en orden. **Fallas plantadas detectadas:** parser de XML permisivo (cae el catálogo XXE, y 2 e2e de XXE dentro de ZIP) y un código de problema quitado de la limpieza.
 **Hecho en v0.11 al cierre (2026-11-19):** pantalla (selector `.csv,.xlsx,.xml,.zip`, `precheck`, aviso «no es una herramienta fiscal», prueba de Chrome nueva con un CFDI aceptado y un XXE frenado en la puerta), `scripts/generar_cfdi.py` (60 CFDI sintéticos con RFC de pruebas del SAT; determinista; el worker real da 11 799.00 al centavo y 4 descartes, como el manifiesto), laboratorio `docs/laboratorio/v0.11-cfdi.md` y capítulo v0.11. `smoke.sh` en orden; Chrome real **33** (antes 32 + 1).
-**S-15 cerrado (2026-11-19, sin comitear):** hook `useMe` en las 9 pantallas con sesión: solo un 401 manda a `/login`; lo demás muestra un aviso con «Reintentar». Chrome real **37** (4 nuevas en `sesion.spec.ts`). Una regresión propia atrapada por la suite (`/admin` con dependencias `[]`).
+**S-15 cerrado (2026-11-19, PR #10 fusionado en `main`):** hook `useMe` en las 9 pantallas con sesión: solo un 401 manda a `/login`; lo demás muestra un aviso con «Reintentar». Chrome real **37** (4 nuevas en `sesion.spec.ts`). Una regresión propia atrapada por la suite (`/admin` con dependencias `[]`).
 **Siguiente:** v0.12 (PDF: tiempo límite, PDF hostil, según `PLAN_DESARROLLO.md`); antes, `/barrido-docs` (DECISIONES.md pesa 64 KB).
 **Bloqueos:** ninguno técnico. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
 **Pendientes** (detalle en `PENDIENTES.md`): CSV en latin1 (se rechaza); de un `.xlsx` solo se lee la primera hoja; Excel o LibreOffice reales y datos de un negocio real sin probar (Online Retail II de UCI, CC BY 4.0: descargarlo requiere el permiso del dueño); S-1 (contraseña de Redis en los argumentos, v1.0). **Sin explicar:** una vez, 3 pruebas de `twofactor` fallaron en una corrida partida en dos y no reproduce.
@@ -28,6 +28,7 @@
 | Fecha | Qué |
 |---|---|
 | 2026-11-18 | v0.11 a medias en `fase/v0.11-cfdi`: contrato, migración, puerta de la API y **worker de CFDI** (lector seguro con `defusedxml`, ZIP, tabla virtual, descartes contados) con 312 pruebas y 7 e2e nuevas contra el worker real (XXE dentro de ZIP incluido); defecto atrapado: la limpieza perdía en silencio los códigos nuevos. Falta pantalla, generador, laboratorio, capítulo, PR y etiqueta. `main` y las etiquetas `v0.7`–`v0.10` al día. |
+| 2026-11-19 | S-15 resuelto: hook `useMe` en las 9 pantallas con sesión (solo un 401 manda a `/login`; lo demás, aviso con «Reintentar»), `sesion.spec.ts` con falla plantada; Chrome real 37/37; PR #10 fusionado en `main`. Una regresión propia (`/admin` con dependencias `[]`) la atrapó la suite. |
 | 2026-11-19 | v0.11 cerrada: pantalla de CFDI, generador de CFDI sintéticos, laboratorio y capítulo; suites completas en verde (worker 312, API 283, e2e 132, Chrome real); PR #9 fusionado y etiqueta `v0.11` en `7ec13ff`. Siguiente en el plan: v0.12 (PDF). |
 | 2026-11-19 | v0.10 construida, verificada, comiteada (9 commits) y subida (`fase/v0.10-informe`): indicadores, Pareto, anomalías y pronóstico con su backtest, `/profit` en centavos enteros, «hoy» en la zona del negocio, gráficas con su tabla, el café ficticio (que corrigió tres defectos), laboratorio de 32 fichas y capítulo v0.10. `main` ya tenía v0.7, v0.8 y v0.9 (PR #7, CI 5/5); se les pusieron sus etiquetas. Sin PR de v0.10 todavía. |
 | 2026-11-18 | v0.9 construida, verificada, comiteada (3 commits) y subida (`fase/v0.9-analisis`): análisis de ventas en dos pasos, worker con `openpyxl`, limpieza con reglas cerradas y `Decimal`, exportación con sanitizador anti fórmulas, pantallas, laboratorio de 33 fichas y capítulo v0.9. Sin PR ni CI. Pendiente sin resolver: v0.7 no aparece fusionada en GitHub. |
