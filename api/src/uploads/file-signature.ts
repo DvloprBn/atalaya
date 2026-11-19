@@ -4,7 +4,7 @@
 //
 // Esto es la revisión BARATA de la API. La profunda (bomba zip, rangos, XML) la hace el worker.
 
-export type UploadKind = 'csv' | 'xlsx';
+export type UploadKind = 'csv' | 'xlsx' | 'xml' | 'zip';
 export type Verdict = { ok: true; kind: UploadKind } | { ok: false; message: string };
 
 const ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\3\4": todo .xlsx es un zip
@@ -15,6 +15,10 @@ const NOT_CSV = ['%PDF-', 'MZ', '\x7fELF', 'GIF8', '\x89PNG', '\xff\xd8\xff', '<
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+// Un CFDI legítimo NUNCA lleva DOCTYPE ni entidades: son la puerta del XXE y del «billion laughs». Se rechazan YA en la puerta
+// (con un mensaje claro); el worker los vuelve a rechazar al leer, por si llegan dentro de un ZIP, que la API no abre.
+const XML_FORBIDDEN = ['<!doctype', '<!entity'];
+
 /** La extensión del último tramo del nombre, en minúsculas ('' si no hay). */
 export function extensionOf(originalName: string): string {
   const base = originalName.split(/[\\/]/).pop() ?? '';
@@ -24,13 +28,15 @@ export function extensionOf(originalName: string): string {
 
 export function checkSignature(originalName: string, bytes: Buffer): Verdict {
   const ext = extensionOf(originalName);
-  if (ext !== 'csv' && ext !== 'xlsx') {
+  if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xml' && ext !== 'zip') {
     // .xlsm, .xlsb y .xls caen aquí a propósito: sus formatos admiten macros.
-    return { ok: false, message: 'Solo se admiten archivos .csv y .xlsx (sin macros)' };
+    return { ok: false, message: 'Solo se admiten archivos .csv, .xlsx (sin macros), .xml (un CFDI) y .zip (varios CFDI)' };
   }
   if (bytes.subarray(0, 8).equals(OLE)) return { ok: false, message: 'Ese formato antiguo de Excel (.xls) no se admite' };
 
   const isZip = bytes.subarray(0, 4).equals(ZIP);
+  if (ext === 'xml') return checkXml(bytes, isZip);
+  if (ext === 'zip') return checkZip(bytes, isZip);
   if (ext === 'xlsx') {
     if (!isZip) return { ok: false, message: 'El contenido no es un libro de Excel (.xlsx)' };
     // Los nombres internos de un zip van en claro: una búsqueda barata separa un .xlsx de otro zip cualquiera.
@@ -54,6 +60,35 @@ export function checkSignature(originalName: string, bytes: Buffer): Verdict {
     return { ok: false, message: 'El CSV debe estar codificado en UTF-8' };
   }
   return { ok: true, kind: 'csv' };
+}
+
+/** Un `.xml` debe ser TEXTO UTF-8 que empiece como XML y parezca un CFDI; la revisión profunda y la de seguridad las hace el worker. */
+function checkXml(bytes: Buffer, isZip: boolean): Verdict {
+  if (isZip) return { ok: false, message: 'El contenido es un archivo comprimido, no un XML' };
+  if (bytes.includes(0)) return { ok: false, message: 'El contenido no es texto (tiene bytes nulos)' };
+  let text: string;
+  try {
+    text = utf8.decode(bytes);
+  } catch {
+    return { ok: false, message: 'El XML debe estar codificado en UTF-8' };
+  }
+  // El BOM y los espacios antes de la declaración son normales; lo demás debe empezar con «<».
+  if (!text.replace(/^\uFEFF/, '').trimStart().startsWith('<')) return { ok: false, message: 'El contenido no es un XML' };
+  const lower = text.toLowerCase();
+  if (XML_FORBIDDEN.some((token) => lower.includes(token))) {
+    return { ok: false, message: 'El XML declara un DOCTYPE o entidades, que un CFDI nunca lleva (se rechaza por seguridad)' };
+  }
+  if (!text.includes('Comprobante')) return { ok: false, message: 'El contenido no parece un CFDI (no trae un Comprobante)' };
+  return { ok: true, kind: 'xml' };
+}
+
+/** Un `.zip` debe ser un zip con entradas `.xml` (sus nombres internos van en claro); lo que haya adentro lo revisa el worker. */
+function checkZip(bytes: Buffer, isZip: boolean): Verdict {
+  if (!isZip) return { ok: false, message: 'El contenido no es un archivo ZIP' };
+  // Un libro de Excel con la extensión cambiada: es otro formato, y con otras reglas (macros).
+  if (bytes.includes('xl/workbook.xml')) return { ok: false, message: 'Ese ZIP es un libro de Excel: súbelo como .xlsx' };
+  if (!bytes.includes('.xml')) return { ok: false, message: 'El ZIP no trae ningún archivo .xml' };
+  return { ok: true, kind: 'zip' };
 }
 
 /**

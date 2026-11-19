@@ -48,6 +48,66 @@ describe('checkSignature', () => {
   });
 });
 
+const CFDI = '<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Total="116.00"/>';
+const entry = (name: string) => Buffer.concat([PK, Buffer.from(`\u0000${name}`)]); // un zip «mínimo»: la firma y un nombre interno en claro
+
+describe('checkSignature: .xml (un CFDI)', () => {
+  it('acepta un XML en UTF-8 que parece un CFDI, con o sin BOM y con espacios antes de la declaración', () => {
+    expect(checkSignature('factura.xml', text(CFDI))).toEqual({ ok: true, kind: 'xml' });
+    expect(checkSignature('factura.XML', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), text(CFDI)]))).toEqual({ ok: true, kind: 'xml' });
+    expect(checkSignature('f.xml', text(`\n  ${CFDI}`))).toEqual({ ok: true, kind: 'xml' });
+  });
+
+  it.each([
+    ['XXE: entidad externa que lee un archivo', '<?xml version="1.0"?><!DOCTYPE c [<!ENTITY x SYSTEM "file:///etc/passwd">]><cfdi:Comprobante>&x;</cfdi:Comprobante>'],
+    ['«billion laughs»: entidades que se multiplican', '<?xml version="1.0"?><!DOCTYPE l [<!ENTITY a "aaaa"><!ENTITY b "&a;&a;&a;">]><Comprobante>&b;</Comprobante>'],
+    ['DOCTYPE en minúsculas', '<?xml version="1.0"?><!doctype x><Comprobante/>'],
+    ['DOCTYPE con mayúsculas y minúsculas mezcladas', '<?xml version="1.0"?><!DocType x><Comprobante/>'],
+    ['solo una declaración de entidad', '<Comprobante><!ENTITY x "y"></Comprobante>'],
+  ])('rechaza en la puerta: %s', (_name, body) => {
+    expect(checkSignature('f.xml', text(body))).toMatchObject({ ok: false, message: expect.stringContaining('DOCTYPE') });
+  });
+
+  it.each([
+    ['un XML que no es un CFDI', '<?xml version="1.0"?><html><body>hola</body></html>', 'CFDI'],
+    ['texto plano', 'hola, esto no es xml', 'no es un XML'],
+    ['un CSV con extensión .xml', 'fecha,total\n2026-01-01,10\n', 'no es un XML'],
+  ])('rechaza %s', (_name, body, fragment) => {
+    expect(checkSignature('f.xml', text(body))).toMatchObject({ ok: false, message: expect.stringContaining(fragment) });
+  });
+
+  it('LÍMITE a propósito: la puerta es barata, así que un XML con la palabra «Comprobante» que no es un CFDI pasa; lo rechaza el worker (not_cfdi)', () => {
+    expect(checkSignature('f.xml', text('<html><body>Comprobante de pago</body></html>'))).toEqual({ ok: true, kind: 'xml' });
+    // Un DOCTYPE escondido en un comentario no es una declaración: lo que cuenta es `<!DOCTYPE`, que el worker vuelve a prohibir.
+    expect(checkSignature('f.xml', text('<Comprobante><!-- DOCTYPE --></Comprobante>'))).toEqual({ ok: true, kind: 'xml' });
+  });
+
+  it('rechaza lo que no es texto UTF-8: bytes nulos, UTF-16, latin1, un zip o un PDF llamados .xml', () => {
+    expect(checkSignature('f.xml', Buffer.concat([text(CFDI), Buffer.from([0])])).ok).toBe(false);
+    expect(checkSignature('f.xml', Buffer.from(`\ufeff${CFDI}`, 'utf16le')).ok).toBe(false); // UTF-16: sus bytes nulos lo delatan
+    expect(checkSignature('f.xml', Buffer.from(CFDI.replace('Comprobante', 'Comprobanté'), 'latin1')).ok).toBe(false);
+    expect(checkSignature('f.xml', entry('a.xml'))).toMatchObject({ ok: false, message: expect.stringContaining('comprimido') });
+    expect(checkSignature('f.xml', text('%PDF-1.7 Comprobante')).ok).toBe(false);
+  });
+});
+
+describe('checkSignature: .zip (varios CFDI)', () => {
+  it('acepta un zip con entradas .xml', () => {
+    expect(checkSignature('cfdi-2026-01.zip', entry('0a1b.xml'))).toEqual({ ok: true, kind: 'zip' });
+  });
+
+  it('rechaza lo que no es un zip, un libro de Excel con otra extensión y un zip sin XML', () => {
+    expect(checkSignature('x.zip', text(CFDI))).toMatchObject({ ok: false, message: expect.stringContaining('no es un archivo ZIP') });
+    expect(checkSignature('x.zip', xlsx())).toMatchObject({ ok: false, message: expect.stringContaining('libro de Excel') });
+    expect(checkSignature('x.zip', entry('foto.png'))).toMatchObject({ ok: false, message: expect.stringContaining('ningún archivo .xml') });
+  });
+
+  it('un .xlsx o un .csv que son zip, o un zip llamado .xlsx, siguen rechazándose como antes', () => {
+    expect(checkSignature('x.xlsx', entry('a.xml')).ok).toBe(false); // un zip cualquiera no es un libro
+    expect(checkSignature('x.csv', entry('a.xml')).ok).toBe(false);
+  });
+});
+
 describe('extensionOf y displayNameOf', () => {
   it('la extensión es la del último tramo, en minúsculas', () => {
     expect(extensionOf('C:\\docs\\Ventas.CSV')).toBe('csv');
