@@ -32,3 +32,16 @@ Ventas limpias: total **18 081 166.00**, idéntico al centavo al del manifiesto;
 positivo (el sábado 2024-12-21, a 5 semanas del inicio de la serie, donde solo hay vecinos de un lado y la temporada sube). Pronóstico con backtest
 de 7,2 % de error. Gastos: total **12 885 026.79**, idéntico al manifiesto; Pareto: Insumos 43,4 %, Nómina 32,4 % e Impuestos 12,3 % son la clase A;
 no hay anomalías ni pronóstico (son gastos espaciados y lo dice). Ventas sucias: encontró 2 vacías, 6 repetidas, 4 fechas imposibles, 3 futuras y 5 importes ilegibles, tal cual se sembraron.
+
+## El reporte en PDF (v0.12)
+
+```bash
+python3 scripts/generar_pdf.py      # reporte-ventas.pdf y manifiesto-pdf.json; tampoco se versionan
+```
+
+Imita lo que exporta un punto de venta: un título, **80 ventas de marzo de 2026** en una tabla con líneas partida en **3 páginas** (las dos
+últimas repiten el encabezado) y, al final, una **tabla de totales** de 2 columnas. Se arma byte a byte con el generador de las pruebas del
+worker (`worker/tests/pdf_maker.py`), sin metadatos. Mapeo: fecha, ticket (pedido), producto, cantidad, importe.
+
+**Qué encontró Atalaya (2026-11-19, worker real):** 83 filas leídas, 80 conservadas y 3 descartadas como `table_skipped` (la tabla de totales,
+página 3); total **6 315.00**, idéntico al manifiesto. El encabezado repetido de las páginas 2 y 3 no se contó como dato.

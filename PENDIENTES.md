@@ -35,6 +35,7 @@
 | D-1 | CSV en latin1 (lo típico de Excel en español): se rechaza desde v0.8. | Claude | Sin fase asignada |
 | D-2 | De un `.xlsx` solo se lee la primera hoja. | Claude | Sin fase asignada |
 | D-3 | Excel o LibreOffice reales y datos de un negocio real sin probar. Candidato: Online Retail II de UCI (CC BY 4.0); descargarlo requiere el permiso del dueño. | Dueño (permiso) · Claude | Antes de v1.0 |
+| D-4 | Un PDF cuya tabla **no tiene líneas** (una hoja de Calc o Excel exportada sin cuadrícula: el caso más común) sale `no_table`. Se probó la estrategia de pdfplumber que alinea texto y, con una hoja real exportada por LibreOffice, pegó la fecha con el producto, partió «Café de olla» en tres columnas y perdió el encabezado: cifras equivocadas sin aviso, peor que rechazar. Mientras tanto, el mensaje de `no_table` dice qué hacer (subir el `.xlsx`/`.csv` original o exportar con la cuadrícula). | Claude | Sin fase asignada |
 
 ## Pruebas
 
