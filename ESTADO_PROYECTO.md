@@ -27,6 +27,7 @@
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-19 | Auditoría de las dependencias de producción del worker con `pip-audit` (7 paquetes de `uv.lock`: defusedxml, et-xmlfile, openpyxl, psycopg, psycopg-binary, redis, tzdata): sin vulnerabilidades conocidas. No cubre las de desarrollo ni la imagen base (S-4). Con esto, API, web y worker quedan auditados. |
 | 2026-11-18 | v0.11 a medias en `fase/v0.11-cfdi`: contrato, migración, puerta de la API y **worker de CFDI** (lector seguro con `defusedxml`, ZIP, tabla virtual, descartes contados) con 312 pruebas y 7 e2e nuevas contra el worker real (XXE dentro de ZIP incluido); defecto atrapado: la limpieza perdía en silencio los códigos nuevos. Falta pantalla, generador, laboratorio, capítulo, PR y etiqueta. `main` y las etiquetas `v0.7`–`v0.10` al día. |
 | 2026-11-19 | Barrido de documentación: `DECISIONES.md` de 64 KB a 16 KB (el diseño de v0.2 a v0.10 pasó íntegro a `docs/historial/DECISIONES_COMPLETAS_2026-11-19.md`, con punteros por línea verificados) y `PENDIENTES.md` ordenado en secciones (Datos D-1 a D-3, Pruebas P-1, Ideas, Cerrados; bloques de avance al historial). Seguridad: 0 vulnerabilidades de producción (API y web), 54 commits sin secretos, puertos solo en `127.0.0.1`; dependencias del worker sin auditar. |
 | 2026-11-19 | S-15 resuelto: hook `useMe` en las 9 pantallas con sesión (solo un 401 manda a `/login`; lo demás, aviso con «Reintentar»), `sesion.spec.ts` con falla plantada; Chrome real 37/37; PR #10 fusionado en `main`. Una regresión propia (`/admin` con dependencias `[]`) la atrapó la suite. |
