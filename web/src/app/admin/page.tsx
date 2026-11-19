@@ -3,7 +3,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import type { components } from '@/lib/api-schema';
-import { api, type PublicUser } from '@/lib/browser-api';
+import { api } from '@/lib/browser-api';
+import { SessionProblem, useMe } from '@/lib/use-me';
 import { useForm } from '@/lib/use-form';
 import { UserRow } from './user-row';
 
@@ -16,7 +17,7 @@ const ADMIN_LEVEL = 3;
 // página solo pregunta y muestra lo que la API responde.
 export default function AdminPage() {
   const router = useRouter();
-  const [me, setMe] = useState<PublicUser | null>(null);
+  const { user: me, failed, retry } = useMe();
   const [roles, setRoles] = useState<AssignableRole[]>([]);
   const [page, setPage] = useState<AdminUserPage | null>(null);
   const [query, setQuery] = useState('');
@@ -29,17 +30,15 @@ export default function AdminPage() {
   }, [query]);
 
   useEffect(() => {
+    if (!me) return;
+    if (me.role.level < ADMIN_LEVEL) return router.replace('/cuenta');
     void (async () => {
-      const who = await api.get<PublicUser>('/api/auth/me');
-      if (!who.ok || !who.data) return router.replace('/login');
-      if (who.data.role.level < ADMIN_LEVEL) return router.replace('/cuenta');
-      setMe(who.data);
       const r = await api.get<AssignableRole[]>('/api/admin/roles');
       if (r.ok && r.data) setRoles(r.data);
       await reload('');
     })();
-    // Solo al entrar: las búsquedas recargan con su propio botón.
-  }, []);
+    // Solo cuando se sabe quién es (`me`): las búsquedas recargan con su propio botón, por eso `reload` no va en la lista.
+  }, [me, router]);
 
   const create = useForm(async ({ email, roleName }) => {
     const res = await api.post('/api/admin/users', { email, roleName });
@@ -47,7 +46,8 @@ export default function AdminPage() {
     return res;
   });
 
-  if (!me) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
+  if (failed) return <SessionProblem onRetry={retry} />;
+  if (!me || me.role.level < ADMIN_LEVEL) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (
     <AppShell user={me}>

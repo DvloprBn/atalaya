@@ -1,20 +1,19 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { api, type PublicUser, type UploadPage } from '@/lib/browser-api';
+import { api, type UploadPage } from '@/lib/browser-api';
 import { isPending } from '@/lib/upload-view';
 import { Pager } from '../admin/seguridad/pager';
 import { UploadForm } from './upload-form';
 import { UploadsTable } from './uploads-table';
+import { SessionProblem, useMe } from '@/lib/use-me';
 
 // Sondeo con retroceso: 2 s, 3 s, 4.5 s… hasta 8 s. Un sondeo fijo y rápido gastaría el tope de peticiones por IP (60/min por ruta).
 const pollDelay = (tries: number) => Math.min(2000 * 1.5 ** tries, 8000);
 
 // Mis archivos. La protección REAL es la API (cada archivo es de su dueño; el ajeno responde 404).
 export default function FilesPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const { user, failed, retry } = useMe();
   const [data, setData] = useState<UploadPage | null>(null);
   const [page, setPage] = useState(1);
 
@@ -23,12 +22,6 @@ export default function FilesPage() {
     if (res.ok && res.data) setData(res.data);
   }, [page]);
 
-  useEffect(() => {
-    void api.get<PublicUser>('/api/auth/me').then((res) => {
-      if (res.ok && res.data) setUser(res.data);
-      else router.replace('/login');
-    });
-  }, [router]);
 
   useEffect(() => {
     if (user) void load();
@@ -46,6 +39,7 @@ export default function FilesPage() {
     return () => clearTimeout(timer);
   }, [waiting, tries, load]);
 
+  if (failed) return <SessionProblem onRetry={retry} />;
   if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (

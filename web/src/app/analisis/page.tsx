@@ -3,9 +3,10 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { ANALYSIS_STATUS, isWorking, KIND_LABELS } from '@/lib/analysis-view';
-import { type Analysis, type AnalysisPage, api, type PublicUser, type UploadPage } from '@/lib/browser-api';
+import { type Analysis, type AnalysisPage, api, type UploadPage } from '@/lib/browser-api';
 import { when } from '@/lib/upload-view';
 import { Pager } from '../admin/seguridad/pager';
+import { SessionProblem, useMe } from '@/lib/use-me';
 
 // Sondeo con retroceso (igual que «Mis archivos»): un sondeo fijo y rápido gastaría el tope de peticiones por IP.
 const pollDelay = (tries: number) => Math.min(2000 * 1.5 ** tries, 8000);
@@ -13,7 +14,7 @@ const pollDelay = (tries: number) => Math.min(2000 * 1.5 ** tries, 8000);
 // Mis análisis. La protección REAL es la API (cada análisis es de su dueño; el ajeno responde 404).
 export default function AnalysesPage() {
   const router = useRouter();
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const { user, failed, retry } = useMe();
   const [data, setData] = useState<AnalysisPage | null>(null);
   const [accepted, setAccepted] = useState<UploadPage['items']>([]);
   const [page, setPage] = useState(1);
@@ -29,12 +30,6 @@ export default function AnalysesPage() {
     if (u.ok && u.data) setAccepted(u.data.items.filter((x) => x.status === 'accepted'));
   }, [page]);
 
-  useEffect(() => {
-    void api.get<PublicUser>('/api/auth/me').then((res) => {
-      if (res.ok && res.data) setUser(res.data);
-      else router.replace('/login');
-    });
-  }, [router]);
   useEffect(() => {
     if (user) void load();
   }, [user, load]);
@@ -59,6 +54,7 @@ export default function AnalysesPage() {
     setError(res.message ?? 'No se pudo empezar el análisis.');
   }
 
+  if (failed) return <SessionProblem onRetry={retry} />;
   if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
   const names = new Map(accepted.map((u) => [u.id, u.displayName ?? 'sin nombre']));
 

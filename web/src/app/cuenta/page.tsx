@@ -1,24 +1,16 @@
 'use client';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { Radar } from '@/components/radar';
-import { api, type PublicUser } from '@/lib/browser-api';
 import styles from './cuenta.module.css';
+import { SessionProblem, useMe } from '@/lib/use-me';
 
 // Página protegida. La protección REAL es la API: sin sesión, /api/auth/me
 // responde 401 y aquí no hay datos que mostrar.
 export default function AccountPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const { user, failed, retry } = useMe();
 
-  useEffect(() => {
-    void api.get<PublicUser>('/api/auth/me').then((res) => {
-      if (res.ok && res.data) setUser(res.data);
-      else router.replace('/login');
-    });
-  }, [router]);
 
+  if (failed) return <SessionProblem onRetry={retry} />;
   if (!user) return <main className="mono muted" style={{ padding: 40 }}>Cargando…</main>;
 
   return (
