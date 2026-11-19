@@ -26,6 +26,7 @@
 
 | Id | Qué | Quién | Cuándo |
 |---|---|---|---|
+| H-2 | `api/package.json` lleva `overrides` con `effect` 3.22.4 por GHSA-7589-6fvf-x4pw (llega por `prisma` 7.10.1 → `@prisma/config`, que fija 3.20.0). Quitarlo cuando una Prisma 7 **estable** traiga `effect` corregido (no la RC de la 8 que hoy marca `latest`), y comprobar que `npm audit --omit=dev` sigue limpio. | Claude | Al subir Prisma |
 | H-1 | gitleaks no está instalado en la máquina (la instalación quedó bloqueada por los permisos del entorno de Claude). El pre-commit usa la imagen Docker `zricethezav/gitleaks:v8.30.1`. Opcional: instalarlo desde su release oficial verificando el checksum. | Dueño (opcional) | Cuando quiera |
 
 ## Datos y negocio
