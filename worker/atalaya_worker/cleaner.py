@@ -24,7 +24,7 @@ TEXT_FIELDS = ("product", "branch", "orderId")
 CODE_ORDER = (
     "blank_row", "duplicate_row", "bad_date", "future_date", "bad_amount", "negative_amount",
     "zero_amount", "bad_quantity", "ambiguous_dates", "text_trimmed", "text_truncated",
-    "unsupported_document", "unsupported_currency",
+    "unsupported_document", "unsupported_currency", "table_skipped",
 )  # fmt: skip
 DROPPING = frozenset(
     {
@@ -36,6 +36,7 @@ DROPPING = frozenset(
         "bad_quantity",
         "unsupported_document",
         "unsupported_currency",
+        "table_skipped",
     }
 )
 
@@ -84,7 +85,7 @@ class _Issues:
 def clean(table: Table, mapping: dict, today: date | None = None) -> tuple[list[CleanRow], dict]:
     cols = check_mapping(mapping, len(table.header))
     rows = list(table.rows)  # ≤ 50 000 filas: hace falta verlas todas para decidir el formato de la columna
-    skipped = table.skipped  # lo que el lector (CFDI) descartó antes de que hubiera filas: se cuenta igual
+    skipped = table.skipped  # lo que el lector (CFDI o PDF) descartó antes de que hubiera filas: se cuenta igual
     # «Hoy» es el de la zona del NEGOCIO (no el UTC del contenedor: de 18:00 a 24:00 en México ya sería mañana).
     # Más un día de holgura: un archivo exportado desde otra zona puede traer la fecha de mañana.
     limit = (today or business_today()) + timedelta(days=1)

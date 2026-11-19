@@ -897,3 +897,60 @@ La lista cerrada de problemas vive en **dos sitios** (el contrato y `cleaner.py`
 ### 6. Lo que NO hace
 
 No valida el sello ni el timbre, ni el estatus (un CFDI cancelado se ve vigente), ni que el IVA cuadre. **No es una herramienta fiscal**, y la pantalla lo dice.
+
+## Capítulo v0.12: un PDF es un programa que se hace pasar por papel
+
+> Lo nuevo: subir un **PDF** con una tabla de ventas o gastos y analizarlo con la misma tubería de v0.9 y v0.10. Ataques y defensas en [`laboratorio/v0.12-pdf.md`](laboratorio/v0.12-pdf.md).
+
+### 1. Preparar y probar
+
+```bash
+docker compose up -d --build                        # reconstruir: el worker trae pdfplumber y la API la puerta de .pdf
+docker compose exec api npx prisma migrate deploy   # pdf_kinds: amplía dos CHECK, sin tocar datos
+python3 scripts/generar_pdf.py                      # un reporte de ventas ficticio en datos-ejemplo/
+```
+
+Entra como `usuario@example.com` (`TestOnly123!`), sube `datos-ejemplo/reporte-ventas.pdf` y pulsa **Analizar ventas**. Al mapear: fecha, ticket (pedido), producto, cantidad e importe. El total debe ser **6 315.00** con **80 filas** conservadas, y el informe de calidad debe contar **3 descartadas** como «Tablas del PDF que no continúan la primera» (la tabla de totales, página 3).
+
+### 2. La idea: una tabla lógica
+
+Igual que con los CFDI, no hay un análisis aparte: el lector convierte el PDF en una tabla y desde ahí todo es como un CSV. Un reporte largo **parte su tabla entre páginas**, así que la primera tabla del documento es la buena y las que la **continúan** (mismo número de columnas) se le pegan; si una continuación repite el encabezado, esa fila no es un dato. Una tabla con otra forma (unos totales) **no se mezcla**: sus filas se cuentan aparte. Si se sumaran, el total saldría al doble sin que nadie mintiera.
+
+### 3. Qué se lee y qué no
+
+| Caso | Resultado |
+|---|---|
+| Tabla con líneas, con texto | Se lee |
+| Tabla sin líneas (una hoja exportada sin cuadrícula) | `no_table` (pendiente D-4): mejor rechazar que leer columnas mezcladas |
+| Escaneo (sin texto) | `no_text_layer`: no se hace OCR |
+| Cifrado, aunque se abra sin contraseña | `encrypted` |
+| JavaScript, acciones, adjuntos, XFA | `active_content`, aunque nunca se ejecutarían |
+| Más de 50 páginas, o una bomba de descompresión | `range_too_large` |
+| Se cuelga | `worker_timeout` a los 15 s |
+
+### 4. El ataque de la fase: el PDF hostil y el tiempo límite
+
+El tope de 20 s de v0.8 usa una **alarma** (`SIGALRM`), y una alarma tiene dos huecos: una bomba de descompresión se come la memoria **antes** de que suene, y un ciclo dentro de código nativo puede no atenderla. Por eso el PDF se abre en un **proceso hijo**, y a un proceso el núcleo le pone topes que no se esquivan:
+
+```python
+# worker/atalaya_worker/pdf_child.py — lo PRIMERO que hace el hijo, antes de tocar el PDF
+resource.setrlimit(resource.RLIMIT_AS, (384 MB, 384 MB))   # una bomba choca aquí: MemoryError
+resource.setrlimit(resource.RLIMIT_CPU, (15, 15))           # el núcleo lo mata (SIGXCPU)
+resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))           # no escribe archivos
+```
+
+Y el padre (`pdf_reader.py`) lo arranca con `python -I`, **entorno vacío** y `cwd=/` (el hijo no ve las contraseñas de la base ni de Redis), lo mata si el reloj pasa de 15 s y **no se fía de lo que contesta**: revisa la forma de la respuesta antes de usarla.
+
+La revisión de contenido activo va en **dos capas**, como el XXE de v0.11: la API busca en los bytes (barata) y el worker en el PDF ya interpretado. Lo que la puerta no puede ver (un nombre con escapes como `/J#61vaScript`, o un diccionario dentro de un flujo comprimido) **pasa a propósito**, y lo frena el worker; las dos cosas tienen sus pruebas.
+
+### 5. Lo que las pruebas encontraron
+
+- **pdfplumber envuelve el `MemoryError`** en su propia excepción: la bomba salía como «dañado» y no como «demasiado grande». El hijo ahora recorre la cadena de causas.
+- **Una edición que se comió un `else`**: todo PDF salía rechazado y, peor, un tipo de archivo desconocido ya no se rechazaba. Ninguna prueba cubría el tipo desconocido; ahora sí.
+- **Una prueba que pasaba por el camino equivocado**: el PDF cifrado de prueba fallaba antes de llegar a la revisión del cifrado, así que quitar esa revisión no rompía nada. Ahora se prueba con un cifrado válido que sí se abre sin contraseña.
+
+Lección: sembrar fallas a propósito es lo único que dice si una prueba prueba lo que su nombre promete.
+
+### 6. Lo que NO hace
+
+No lee tablas sin líneas ni escaneos, ni abre PDF con contraseña. `pypdfium2` y `Pillow` llegan como dependencias de pdfplumber pero **no se cargan** (solo sirven para dibujar páginas).

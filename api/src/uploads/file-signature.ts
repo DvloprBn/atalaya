@@ -2,9 +2,10 @@
 // (los dos los escribe quien sube el archivo). La extensión solo sirve para una cosa: que COINCIDA con lo que
 // los bytes dicen; si no coincide, se rechaza (un .xlsx que no es un zip, un zip llamado .csv).
 //
-// Esto es la revisión BARATA de la API. La profunda (bomba zip, rangos, XML) la hace el worker.
+// Esto es la revisión BARATA de la API. La profunda (bomba zip, rangos, XML, PDF) la hace el worker.
+import { checkPdf } from './pdf-signature.js';
 
-export type UploadKind = 'csv' | 'xlsx' | 'xml' | 'zip';
+export type UploadKind = 'csv' | 'xlsx' | 'xml' | 'zip' | 'pdf';
 export type Verdict = { ok: true; kind: UploadKind } | { ok: false; message: string };
 
 const ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\3\4": todo .xlsx es un zip
@@ -28,9 +29,16 @@ export function extensionOf(originalName: string): string {
 
 export function checkSignature(originalName: string, bytes: Buffer): Verdict {
   const ext = extensionOf(originalName);
-  if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xml' && ext !== 'zip') {
+  if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xml' && ext !== 'zip' && ext !== 'pdf') {
     // .xlsm, .xlsb y .xls caen aquí a propósito: sus formatos admiten macros.
-    return { ok: false, message: 'Solo se admiten archivos .csv, .xlsx (sin macros), .xml (un CFDI) y .zip (varios CFDI)' };
+    return {
+      ok: false,
+      message: 'Solo se admiten archivos .csv, .xlsx (sin macros), .xml (un CFDI), .zip (varios CFDI) y .pdf (con una tabla)',
+    };
+  }
+  if (ext === 'pdf') {
+    const pdf = checkPdf(bytes);
+    return pdf.ok ? { ok: true, kind: 'pdf' } : pdf;
   }
   if (bytes.subarray(0, 8).equals(OLE)) return { ok: false, message: 'Ese formato antiguo de Excel (.xls) no se admite' };
 

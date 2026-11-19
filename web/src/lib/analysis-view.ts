@@ -38,6 +38,7 @@ export const ISSUE_LABELS: Record<Issue['code'], string> = {
   text_truncated: 'Texto de más de 200 caracteres (se recortó)',
   unsupported_document: 'Comprobantes que no son ventas ni gastos (pagos, traslados, nóminas)',
   unsupported_currency: 'Comprobantes en otra moneda (solo se leen los de MXN)',
+  table_skipped: 'Tablas del PDF que no continúan la primera (otro número de columnas); el ejemplo dice la página',
 };
 
 export type MappingField = 'date' | 'amount' | 'quantity' | 'product' | 'branch' | 'orderId';

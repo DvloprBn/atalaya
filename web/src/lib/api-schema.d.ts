@@ -580,8 +580,8 @@ export interface paths {
         get: operations["listUploads"];
         put?: never;
         /**
-         * Sube un archivo (CSV, XLSX, un CFDI en XML o un ZIP de CFDI) y lo encola para su revisión
-         * @description multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV, XLSX, XML ni ZIP, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415. **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado o con DOCTYPE (XXE), y que un `.xml` o cada entrada de un `.zip` sea de verdad un CFDI 3.3 o 4.0. **No se valida la firma ni el estatus del CFDI ante el SAT**: es analítica, no fiscal. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
+         * Sube un archivo (CSV, XLSX, un CFDI en XML, un ZIP de CFDI o un PDF con una tabla) y lo encola para su revisión
+         * @description multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV, XLSX, XML, ZIP ni PDF, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415, igual que un PDF cifrado o con contenido activo visible en sus bytes (JavaScript, acciones de lanzamiento, archivos incrustados, XFA). **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado o con DOCTYPE (XXE), y que un `.xml` o cada entrada de un `.zip` sea de verdad un CFDI 3.3 o 4.0. **No se valida la firma ni el estatus del CFDI ante el SAT**: es analítica, no fiscal. Un PDF se abre en un proceso aparte con tope de tiempo y de memoria, y debe tener texto (no se hace OCR), máximo 50 páginas, ningún contenido activo y al menos una tabla. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -933,7 +933,7 @@ export interface components {
         UploadRequest: {
             /**
              * Format: binary
-             * @description CSV o XLSX, máximo 5 MB
+             * @description CSV, XLSX, XML (CFDI), ZIP de CFDI o PDF; máximo 5 MB
              */
             file: string;
         };
@@ -943,15 +943,15 @@ export interface components {
          */
         UploadStatus: "queued" | "checking" | "accepted" | "rejected";
         /**
-         * @description Lista CERRADA; nunca texto libre del archivo ni del error interno. `not_cfdi` = un XML (o una entrada de un ZIP) que no es un comprobante CFDI 3.3 o 4.0. Un XML con DOCTYPE o entidades (XXE) sale como `corrupt`. Los rechazos de la API (tamaño, firma, macros) no llegan aquí: se responden 413/415 y no se guarda nada.
+         * @description Lista CERRADA; nunca texto libre del archivo ni del error interno. `not_cfdi` = un XML (o una entrada de un ZIP) que no es un comprobante CFDI 3.3 o 4.0. Un XML con DOCTYPE o entidades (XXE) sale como `corrupt`. Solo de PDF: `encrypted` = protegido con contraseña o cifrado; `active_content` = trae JavaScript, acciones, archivos incrustados o formularios XFA (lo que la puerta no vio porque iba comprimido o escrito con escapes); `no_text_layer` = ninguna página tiene texto (un escaneo; no se hace OCR); `no_table` = tiene texto pero ninguna tabla de al menos 2 columnas y 2 filas. Un PDF de más de 50 páginas, o que agota la memoria del lector, sale como `range_too_large`; uno que agota su tiempo, como `worker_timeout`; uno con la estructura rota, como `corrupt`. Los rechazos de la API (tamaño, firma, macros, PDF cifrado o con contenido activo a la vista) no llegan aquí: se responden 413/415 y no se guarda nada.
          * @enum {string}
          */
-        UploadRejectReason: "zip_bomb" | "too_many_entries" | "range_too_large" | "corrupt" | "empty" | "worker_timeout" | "not_cfdi";
+        UploadRejectReason: "zip_bomb" | "too_many_entries" | "range_too_large" | "corrupt" | "empty" | "worker_timeout" | "not_cfdi" | "encrypted" | "active_content" | "no_text_layer" | "no_table";
         Upload: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "csv" | "xlsx" | "xml" | "zip";
+            kind: "csv" | "xlsx" | "xml" | "zip" | "pdf";
             /** @description Nombre original saneado, solo para mostrárselo a su dueño. Se omite si no hay. */
             displayName?: string;
             sizeBytes: number;
@@ -973,7 +973,7 @@ export interface components {
             id: string;
             ownerEmail: components["schemas"]["Email"];
             /** @enum {string} */
-            kind: "csv" | "xlsx" | "xml" | "zip";
+            kind: "csv" | "xlsx" | "xml" | "zip" | "pdf";
             sizeBytes: number;
             status: components["schemas"]["UploadStatus"];
             /** Format: date-time */
@@ -1051,10 +1051,10 @@ export interface components {
             orderId?: components["schemas"]["ColumnIndex"];
         };
         /**
-         * @description Lista CERRADA de problemas que la limpieza sabe reconocer. Los primeros cinco y `bad_quantity` TIRAN la fila; `negative_amount`, `zero_amount` y `ambiguous_dates` solo AVISAN; `text_trimmed` y `text_truncated` son arreglos menores (espacios, y texto de más de 200 caracteres). `unsupported_document` y `unsupported_currency` solo salen al leer CFDI y TIRAN el comprobante entero (un pago, un traslado o una nómina; o uno en otra moneda que no sea MXN). Nada se descarta sin quedar contado aquí.
+         * @description Lista CERRADA de problemas que la limpieza sabe reconocer. Los primeros cinco y `bad_quantity` TIRAN la fila; `negative_amount`, `zero_amount` y `ambiguous_dates` solo AVISAN; `text_trimmed` y `text_truncated` son arreglos menores (espacios, y texto de más de 200 caracteres). `unsupported_document` y `unsupported_currency` solo salen al leer CFDI y TIRAN el comprobante entero (un pago, un traslado o una nómina; o uno en otra moneda que no sea MXN). `table_skipped` solo sale al leer PDF y TIRA las filas de una tabla que no continúa la primera (otro número de columnas); en sus ejemplos, `row` es el número de PÁGINA. Nada se descarta sin quedar contado aquí.
          * @enum {string}
          */
-        IssueCode: "blank_row" | "duplicate_row" | "bad_date" | "future_date" | "bad_amount" | "negative_amount" | "zero_amount" | "bad_quantity" | "ambiguous_dates" | "text_trimmed" | "text_truncated" | "unsupported_document" | "unsupported_currency";
+        IssueCode: "blank_row" | "duplicate_row" | "bad_date" | "future_date" | "bad_amount" | "negative_amount" | "zero_amount" | "bad_quantity" | "ambiguous_dates" | "text_trimmed" | "text_truncated" | "unsupported_document" | "unsupported_currency" | "table_skipped";
         QualityIssue: {
             code: components["schemas"]["IssueCode"];
             count: number;

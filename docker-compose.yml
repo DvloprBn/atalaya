@@ -47,8 +47,10 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
-      # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP (v0.9: ~110 subidas y análisis por corrida). En producción NO se pone (vale 1).
-      THROTTLE_SCALE: "10"
+      # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP. En producción NO se pone (vale 1).
+      # v0.12: la e2e hace 107 subidas y en el CI (más rápido) más de 100 cabían en un minuto: con 15, el tope de subidas
+      # (10 × 15 = 150 por minuto) supera a TODAS las de la suite, y ya no depende de la velocidad de la máquina.
+      THROTTLE_SCALE: "15"
       # Login con Google. Por defecto apunta al servidor OAuth FALSO de abajo. Para usar Google de
       # verdad, pon los seis OAUTH_* en tu .env (ver .env.example); sin ellos, el valor de aquí manda.
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-atalaya-mock-client}

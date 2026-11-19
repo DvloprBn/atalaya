@@ -51,7 +51,7 @@ export function UploadsTable({ items, onChanged }: { items: Upload[]; onChanged:
                 </span>
                 {u.status === 'rejected' && (
                   <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-                    {REJECT_LABELS[u.rejectReason ?? ''] ?? 'No pasó la revisión.'}
+                    {(u.rejectReason && REJECT_LABELS[u.rejectReason]) ?? 'No pasó la revisión.'}
                   </p>
                 )}
                 {isPending(u) && <span className="sr-only"> (la lista se actualiza sola)</span>}

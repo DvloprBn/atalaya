@@ -1,6 +1,8 @@
 // La pantalla de archivos (v0.8) en Chrome real, contra el sistema vivo.
 // Cuentas de la semilla: <rol>@example.com / TestOnly123!
 import { type Dialog, expect, type Page, test } from '@playwright/test';
+// El mismo generador de PDF de las e2e de la API (un solo lugar donde se arma un PDF a mano).
+import { makePdf, VENTAS } from '../../api/test/e2e/pdf';
 
 async function loginAs(page: Page, role: string) {
   await page.goto('/login');
@@ -10,7 +12,7 @@ async function loginAs(page: Page, role: string) {
   await expect(page.getByRole('heading', { name: 'Mi cuenta' })).toBeVisible();
 }
 
-const upload = (page: Page, name: string, content: string) =>
+const upload = (page: Page, name: string, content: string | Buffer) =>
   page.getByLabel('Archivo', { exact: true }).setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(content) });
 
 /** Borra todo lo de la cuenta desde la propia pantalla (así también se prueba el botón). */
@@ -74,6 +76,23 @@ test.describe('Mis archivos', () => {
     await expect(page.getByRole('row').filter({ hasText: 'xxe.xml' })).toHaveCount(0);
   });
 
+  test('un PDF con tabla se acepta; uno con JavaScript lo frena la puerta; un escaneo lo rechaza el worker con su motivo', async () => {
+    await page.getByRole('link', { name: 'Mis archivos' }).click();
+    await expect(page.getByText('tabla con líneas')).toBeVisible();
+    await upload(page, 'reporte.pdf', makePdf([[['table', VENTAS]]]));
+    await page.getByRole('button', { name: 'Subir' }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'reporte.pdf' }).getByText('aceptado')).toBeVisible({ timeout: 20_000 });
+    await upload(page, 'js.pdf', makePdf([[['table', VENTAS]]], { catalogExtra: '/OpenAction << /S /JavaScript /JS (x) >>' }));
+    await page.getByRole('button', { name: 'Subir' }).click();
+    await expect(page.locator('form [role="alert"]')).toContainText('contenido activo');
+    await expect(page.getByRole('row').filter({ hasText: 'js.pdf' })).toHaveCount(0);
+    await upload(page, 'escaneo.pdf', makePdf([[['lines']]]));
+    await page.getByRole('button', { name: 'Subir' }).click();
+    const scan = page.getByRole('row').filter({ hasText: 'escaneo.pdf' });
+    await expect(scan.getByText('rechazado')).toBeVisible({ timeout: 20_000 });
+    await expect(scan).toContainText('parece un escaneo');
+  });
+
   test('un archivo que el worker rechaza muestra el motivo en español', async () => {
     await upload(page, 'vacio.csv', 'fecha,total\n');
     await page.getByRole('button', { name: 'Subir' }).click();
@@ -85,7 +104,9 @@ test.describe('Mis archivos', () => {
   test('la revisión de cortesía frena lo evidente; la API frena lo demás (firma falsa)', async () => {
     await upload(page, 'macros.xlsm', 'x');
     await page.getByRole('button', { name: 'Subir' }).click();
-    await expect(page.locator('form [role="alert"]')).toHaveText('Solo se admiten archivos .csv, .xlsx (sin macros), .xml (CFDI) y .zip de CFDI.');
+    await expect(page.locator('form [role="alert"]')).toHaveText(
+      'Solo se admiten archivos .csv, .xlsx (sin macros), .xml (CFDI), .zip de CFDI y .pdf con una tabla.',
+    );
     // Pasa la cortesía (se llama .xlsx) pero NO es un libro: lo dice la API por la firma de bytes.
     await upload(page, 'falso.xlsx', 'fecha,total\n1,2\n');
     await page.getByRole('button', { name: 'Subir' }).click();

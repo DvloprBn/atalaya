@@ -16,7 +16,7 @@ import psycopg
 @dataclass(frozen=True)
 class Job:
     id: str
-    kind: str  # csv | xlsx
+    kind: str  # csv | xlsx | xml | zip | pdf
     sha256: str
     size_bytes: int
     storage_key: str
