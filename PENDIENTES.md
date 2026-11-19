@@ -59,5 +59,5 @@
 - ✅ Worker de CFDI: lector seguro, ZIP, tabla virtual, descartes contados, revisión profunda; 312 pruebas con el catálogo XXE. Comiteado.
 - ✅ e2e de CFDI contra el worker real (7: ZIP con cifras exactas, `.xml` suelto, XXE en `.xml` y dentro de ZIP, billion laughs, entradas malas, 501 entradas). Comiteado en el cierre.
 - ✅ Pantalla, generador de CFDI sintéticos, laboratorio y capítulo (2026-11-19, sin comitear).
-- ⏳ **Falta en v0.11:** comitear, PR y CI; etiqueta `v0.11` (con permiso del dueño).
+- ✅ PR #9 fusionado y etiqueta `v0.11` puesta (2026-11-19). v0.11 cerrada.
 - **Gestión:** `main` contiene v0.10; etiquetas `v0.1`–`v0.10` puestas.

@@ -2,22 +2,22 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-19** (v0.11 construida y verificada, sin comitear; falta PR, CI y etiqueta)
+Última actualización: **2026-11-19** (v0.11 cerrada: PR #9 fusionado, etiqueta puesta)
 
 ---
 
 ## 1. Dónde estamos
 ### ESTADO VIVO (único vigente) — reescrito 2026-11-18
 
-**Situación:** `main` ya contiene hasta **v0.10** (PR #8, CI 5/5) y todas las etiquetas `v0.1`–`v0.10` están puestas. Se trabaja **v0.11 (CFDI en XML)** en `fase/v0.11-cfdi`, **construida y verificada; falta comitear lo de hoy, PR, CI y etiqueta** (el detalle de v0.10 vive en `docs/historial/ESTADOS_ANTERIORES.md`).
+**Situación:** `main` ya contiene hasta **v0.11** (CFDI en XML, PR #9) y todas las etiquetas `v0.1`–`v0.11` están puestas (`v0.11` en `7ec13ff`). Siguiente fase según `PLAN_DESARROLLO.md` (el detalle de v0.10 vive en `docs/historial/ESTADOS_ANTERIORES.md`).
 **Hecho en v0.11 (verificado hoy):**
 - **Contrato** 0.11.0 (`kind` `xml` y `zip`, motivo `not_cfdi`, problemas `unsupported_document` y `unsupported_currency`) y **migración** `cfdi_kinds` (CHECK ampliados).
 - **API:** la puerta de `.xml` y `.zip` por firma de bytes; rechaza `<!DOCTYPE`/`<!ENTITY` ya en la puerta (415).
 - **Worker:** lector seguro de CFDI 3.3 y 4.0 (`defusedxml` con DTD prohibido, topes de tamaño, profundidad, elementos y atributos), lector de ZIP (cada entrada es un `.xml`; una mala rechaza todo el ZIP), **tabla virtual** (un renglón por concepto; ingreso suma, egreso resta; pago, traslado, nómina y otra moneda se descartan **contados**), revisión profunda y vista previa (sugiere `uuid` como pedido).
 - **Defecto atrapado por la prueba:** la limpieza ignoraba en silencio los dos códigos nuevos (la lista cerrada vive en el contrato y en `cleaner.py`); corregido y con una prueba que obliga a que ambas coincidan.
 **Pruebas (todas verdes hoy):** worker **312** (con catálogo XXE, ZIP y tabla virtual) · API unitarias **283** · e2e **132** (11 archivos; 7 nuevas de CFDI contra el worker real) · `permisos-worker.sh` y `smoke.sh` en orden. **Fallas plantadas detectadas:** parser de XML permisivo (cae el catálogo XXE, y 2 e2e de XXE dentro de ZIP) y un código de problema quitado de la limpieza.
-**Hecho hoy (2026-11-19, sin comitear):** pantalla (selector `.csv,.xlsx,.xml,.zip`, `precheck`, aviso «no es una herramienta fiscal», prueba de Chrome nueva con un CFDI aceptado y un XXE frenado en la puerta), `scripts/generar_cfdi.py` (60 CFDI sintéticos con RFC de pruebas del SAT; determinista; el worker real da 11 799.00 al centavo y 4 descartes, como el manifiesto), laboratorio `docs/laboratorio/v0.11-cfdi.md` y capítulo v0.11. `smoke.sh` en orden; Chrome real **33** (antes 32 + 1).
-**Siguiente:** comitear por ruta (con permiso), correr las suites completas una vez más, PR, CI y etiqueta `v0.11` (con permiso del dueño).
+**Hecho en v0.11 al cierre (2026-11-19):** pantalla (selector `.csv,.xlsx,.xml,.zip`, `precheck`, aviso «no es una herramienta fiscal», prueba de Chrome nueva con un CFDI aceptado y un XXE frenado en la puerta), `scripts/generar_cfdi.py` (60 CFDI sintéticos con RFC de pruebas del SAT; determinista; el worker real da 11 799.00 al centavo y 4 descartes, como el manifiesto), laboratorio `docs/laboratorio/v0.11-cfdi.md` y capítulo v0.11. `smoke.sh` en orden; Chrome real **33** (antes 32 + 1).
+**Siguiente:** v0.12 (PDF: tiempo límite, PDF hostil, según `PLAN_DESARROLLO.md`); o S-15 (un 429 o 5xx de `/me` manda a `/login`), el defecto de disponibilidad más concreto.
 **Bloqueos:** ninguno técnico. Probar Google **de verdad** necesita un cliente OAuth que crea el dueño (opcional, S-12).
 **Pendientes** (detalle en `PENDIENTES.md`): S-15 (un 429 o 5xx de `/me` manda a `/login`); CSV en latin1 (se rechaza); de un `.xlsx` solo se lee la primera hoja; Excel o LibreOffice reales y datos de un negocio real sin probar (Online Retail II de UCI, CC BY 4.0: descargarlo requiere el permiso del dueño); S-1 (contraseña de Redis en los argumentos, v1.0). **Sin explicar:** una vez, 3 pruebas de `twofactor` fallaron en una corrida partida en dos y no reproduce.
 **Ojo al probar:** (1) las suites salen de una sola IP y el tope vive en la memoria de la API (S-6): entre dos corridas completas, `docker compose restart api`; (2) **antes de una e2e, reconstruir las imágenes** (`docker compose up -d --build api worker`): la API vieja daba 415 a todo `.xml`; (3) `docker compose` necesita `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD` en `.env` (ya están en el del dueño).
@@ -27,6 +27,7 @@
 | Fecha | Qué |
 |---|---|
 | 2026-11-18 | v0.11 a medias en `fase/v0.11-cfdi`: contrato, migración, puerta de la API y **worker de CFDI** (lector seguro con `defusedxml`, ZIP, tabla virtual, descartes contados) con 312 pruebas y 7 e2e nuevas contra el worker real (XXE dentro de ZIP incluido); defecto atrapado: la limpieza perdía en silencio los códigos nuevos. Falta pantalla, generador, laboratorio, capítulo, PR y etiqueta. `main` y las etiquetas `v0.7`–`v0.10` al día. |
+| 2026-11-19 | v0.11 cerrada: pantalla de CFDI, generador de CFDI sintéticos, laboratorio y capítulo; suites completas en verde (worker 312, API 283, e2e 132, Chrome real); PR #9 fusionado y etiqueta `v0.11` en `7ec13ff`. Siguiente en el plan: v0.12 (PDF). |
 | 2026-11-19 | v0.10 construida, verificada, comiteada (9 commits) y subida (`fase/v0.10-informe`): indicadores, Pareto, anomalías y pronóstico con su backtest, `/profit` en centavos enteros, «hoy» en la zona del negocio, gráficas con su tabla, el café ficticio (que corrigió tres defectos), laboratorio de 32 fichas y capítulo v0.10. `main` ya tenía v0.7, v0.8 y v0.9 (PR #7, CI 5/5); se les pusieron sus etiquetas. Sin PR de v0.10 todavía. |
 | 2026-11-18 | v0.9 construida, verificada, comiteada (3 commits) y subida (`fase/v0.9-analisis`): análisis de ventas en dos pasos, worker con `openpyxl`, limpieza con reglas cerradas y `Decimal`, exportación con sanitizador anti fórmulas, pantallas, laboratorio de 33 fichas y capítulo v0.9. Sin PR ni CI. Pendiente sin resolver: v0.7 no aparece fusionada en GitHub. |
 | 2026-11-18 | v0.8 construida, verificada, comiteada y subida (`fase/v0.8-subida`): subida segura, cola, worker con rol de base y usuario de Redis mínimos, pantallas de archivos, laboratorio de 19 fichas, capítulo v0.8 y `permisos-worker.sh`. Anotado S-15. Sin PR ni CI todavía. |
