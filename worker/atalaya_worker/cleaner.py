@@ -24,8 +24,20 @@ TEXT_FIELDS = ("product", "branch", "orderId")
 CODE_ORDER = (
     "blank_row", "duplicate_row", "bad_date", "future_date", "bad_amount", "negative_amount",
     "zero_amount", "bad_quantity", "ambiguous_dates", "text_trimmed", "text_truncated",
+    "unsupported_document", "unsupported_currency",
 )  # fmt: skip
-DROPPING = frozenset({"blank_row", "duplicate_row", "bad_date", "future_date", "bad_amount", "bad_quantity"})
+DROPPING = frozenset(
+    {
+        "blank_row",
+        "duplicate_row",
+        "bad_date",
+        "future_date",
+        "bad_amount",
+        "bad_quantity",
+        "unsupported_document",
+        "unsupported_currency",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +84,7 @@ class _Issues:
 def clean(table: Table, mapping: dict, today: date | None = None) -> tuple[list[CleanRow], dict]:
     cols = check_mapping(mapping, len(table.header))
     rows = list(table.rows)  # ≤ 50 000 filas: hace falta verlas todas para decidir el formato de la columna
+    skipped = table.skipped  # lo que el lector (CFDI) descartó antes de que hubiera filas: se cuenta igual
     # «Hoy» es el de la zona del NEGOCIO (no el UTC del contenedor: de 18:00 a 24:00 en México ya sería mañana).
     # Más un día de holgura: un archivo exportado desde otra zona puede traer la fecha de mañana.
     limit = (today or business_today()) + timedelta(days=1)
@@ -85,6 +98,8 @@ def clean(table: Table, mapping: dict, today: date | None = None) -> tuple[list[
         separator = decide_decimal_separator([cell_text(r[1][cols["amount"]]) for r in rows])
 
     issues, kept, seen = _Issues(), [], set()
+    for code, number, raw in skipped:
+        issues.add(code, number, raw)
     filled, invalid = Counter(), Counter()
     for number, cells in rows:
         if not any(cell_text(c).strip() for c in cells):
@@ -142,9 +157,9 @@ def clean(table: Table, mapping: dict, today: date | None = None) -> tuple[list[
     total = sum((r.amount for r in kept), Decimal(0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     dates = [r.date for r in kept]
     report = {
-        "rowsRead": len(rows),
+        "rowsRead": len(rows) + len(skipped),
         "rowsKept": len(kept),
-        "rowsDropped": len(rows) - len(kept),
+        "rowsDropped": len(rows) + len(skipped) - len(kept),
         "dateFrom": min(dates).isoformat(),
         "dateTo": max(dates).isoformat(),
         "totalAmount": money(total),

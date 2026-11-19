@@ -30,7 +30,7 @@ target-version = "py314"
 select = ["E", "F", "I", "B", "S", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]  # en pruebas, assert es justo lo que se usa
+"tests/*" = ["S101", "E501"]  # en pruebas, assert es lo que se usa y los XML de ejemplo son largos
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

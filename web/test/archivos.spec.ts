@@ -57,6 +57,23 @@ test.describe('Mis archivos', () => {
     await expect(row.getByText('aceptado')).toBeVisible({ timeout: 20_000 });
   });
 
+  test('un CFDI en .xml se acepta; uno con DOCTYPE lo frena la puerta; y el aviso dice que no es herramienta fiscal', async () => {
+    await page.getByRole('link', { name: 'Mis archivos' }).click();
+    await expect(page.getByText('no es una herramienta fiscal')).toBeVisible();
+    const cfdi = (extra: string) =>
+      `<?xml version="1.0" encoding="UTF-8"?>${extra}<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-03-15T10:30:00" TipoDeComprobante="I" Moneda="MXN">` +
+      '<cfdi:Emisor Rfc="EKU9003173C9" Nombre="PRUEBA"/><cfdi:Receptor Rfc="XAXX010101000" Nombre="PUBLICO EN GENERAL"/>' +
+      '<cfdi:Conceptos><cfdi:Concepto Cantidad="1" Descripcion="Latte" Importe="52.00"/></cfdi:Conceptos></cfdi:Comprobante>';
+    await upload(page, 'factura.xml', cfdi(''));
+    await page.getByRole('button', { name: 'Subir' }).click();
+    const row = page.getByRole('row').filter({ hasText: 'factura.xml' });
+    await expect(row.getByText('aceptado')).toBeVisible({ timeout: 20_000 });
+    await upload(page, 'xxe.xml', cfdi('<!DOCTYPE c [<!ENTITY x SYSTEM "file:///etc/passwd">]>'));
+    await page.getByRole('button', { name: 'Subir' }).click();
+    await expect(page.locator('form [role="alert"]')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'xxe.xml' })).toHaveCount(0);
+  });
+
   test('un archivo que el worker rechaza muestra el motivo en español', async () => {
     await upload(page, 'vacio.csv', 'fecha,total\n');
     await page.getByRole('button', { name: 'Subir' }).click();
@@ -68,7 +85,7 @@ test.describe('Mis archivos', () => {
   test('la revisión de cortesía frena lo evidente; la API frena lo demás (firma falsa)', async () => {
     await upload(page, 'macros.xlsm', 'x');
     await page.getByRole('button', { name: 'Subir' }).click();
-    await expect(page.locator('form [role="alert"]')).toHaveText('Solo se admiten archivos .csv y .xlsx (sin macros).');
+    await expect(page.locator('form [role="alert"]')).toHaveText('Solo se admiten archivos .csv, .xlsx (sin macros), .xml (CFDI) y .zip de CFDI.');
     // Pasa la cortesía (se llama .xlsx) pero NO es un libro: lo dice la API por la firma de bytes.
     await upload(page, 'falso.xlsx', 'fecha,total\n1,2\n');
     await page.getByRole('button', { name: 'Subir' }).click();

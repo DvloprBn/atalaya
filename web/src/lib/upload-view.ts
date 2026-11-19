@@ -3,7 +3,7 @@
 import type { Upload } from './browser-api';
 
 export const MAX_BYTES = 5 * 1024 * 1024;
-export const ACCEPT = '.csv,.xlsx';
+export const ACCEPT = '.csv,.xlsx,.xml,.zip';
 
 export const STATUS_LABELS: Record<Upload['status'], string> = {
   queued: 'en cola',
@@ -19,6 +19,7 @@ export const REJECT_LABELS: Record<string, string> = {
   corrupt: 'Está dañado o no cumple el formato de un CSV o un .xlsx sin macros.',
   empty: 'No tiene datos (está vacío o solo trae encabezado).',
   worker_timeout: 'La revisión tardó demasiado y se canceló.',
+  not_cfdi: 'No es un comprobante CFDI 3.3 o 4.0 válido (o alguno de los de un ZIP no lo es).',
 };
 
 /** ¿Falta que el worker lo resuelva? Mientras sea así, la tabla se vuelve a leer sola. */
@@ -36,7 +37,7 @@ export function formatSize(bytes: number): string {
  */
 export function precheck(file: File | undefined): string {
   if (!file) return 'Elige un archivo.';
-  if (!/\.(csv|xlsx)$/i.test(file.name)) return 'Solo se admiten archivos .csv y .xlsx (sin macros).';
+  if (!/\.(csv|xlsx|xml|zip)$/i.test(file.name)) return 'Solo se admiten archivos .csv, .xlsx (sin macros), .xml (CFDI) y .zip de CFDI.';
   if (file.size === 0) return 'El archivo está vacío.';
   if (file.size > MAX_BYTES) return 'El archivo pasa de 5 MB.';
   return '';

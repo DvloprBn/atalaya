@@ -3,10 +3,14 @@
 // y la carrera del tope de 10 archivos por cuenta. Las pruebas de la revisión PROFUNDA (bomba zip,
 // rango gigante) llegan con el worker. Cuentas de la semilla: <rol>@example.com / TestOnly123!
 import { Browser } from './helpers.js';
+import { makeZip } from './zip.js';
 
 const PK = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const xlsxBytes = (extra = '') => Buffer.concat([PK, Buffer.from(`[Content_Types].xml xl/workbook.xml ${extra}`)]);
 const csv = 'fecha,total\n2026-01-01,10\n';
+
+/** Un zip que es un .xlsx de verdad (con sus partes), para probar que un libro de Excel con otra extensión no pasa por .zip. */
+const workbookZip = () => makeZip({ '[Content_Types].xml': '<Types/>', 'xl/workbook.xml': '<workbook/>' });
 
 function form(bytes: Buffer | string, filename: string, extra: Record<string, string> = {}): FormData {
   const f = new FormData();
@@ -90,6 +94,32 @@ describe('v0.8 · subida segura (sistema vivo)', () => {
     two.append('file', new File([csv], 'b.csv'));
     expect((await user.postForm('/api/uploads', two)).status).toBe(400);
     expect((await user.post('/api/uploads', { file: 'x' })).status).toBe(400);
+  });
+
+  describe('v0.11 · CFDI en la puerta (.xml y .zip)', () => {
+    const CFDI = '<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Total="116.00"/>';
+
+    it('un .xml con forma de CFDI y un .zip de XML se aceptan en la puerta con su tipo (la revisión profunda es del worker)', async () => {
+      const xml = await user.postForm('/api/uploads', form(CFDI, 'factura.xml'));
+      expect([xml.status, xml.body.kind]).toEqual([202, 'xml']);
+      const zip = await user.postForm('/api/uploads', form(makeZip({ 'a.xml': CFDI, 'b.xml': CFDI }), 'cfdi-enero.zip'));
+      expect([zip.status, zip.body.kind]).toEqual([202, 'zip']);
+    });
+
+    it.each([
+      ['XXE: entidad externa que lee /etc/passwd', '<?xml version="1.0"?><!DOCTYPE c [<!ENTITY x SYSTEM "file:///etc/passwd">]><cfdi:Comprobante>&x;</cfdi:Comprobante>', 'f.xml'],
+      ['«billion laughs»', '<?xml version="1.0"?><!DOCTYPE l [<!ENTITY a "aaaa"><!ENTITY b "&a;&a;&a;&a;">]><Comprobante>&b;</Comprobante>', 'f.xml'],
+      ['DOCTYPE en minúsculas', '<!doctype x><Comprobante/>', 'f.xml'],
+      ['un XML que no es un CFDI', '<?xml version="1.0"?><nota>hola</nota>', 'f.xml'],
+      ['un CSV con extensión .xml', 'fecha,total\n2026-01-01,10\n', 'f.xml'],
+      ['un .xml con bytes nulos', Buffer.concat([Buffer.from(CFDI), Buffer.from([0])]), 'f.xml'],
+      ['un zip llamado .xml', makeZip({ 'a.xml': CFDI }), 'f.xml'],
+      ['un .zip que no es zip', CFDI, 'f.zip'],
+      ['un libro de Excel con extensión .zip', workbookZip(), 'f.zip'],
+      ['un .zip sin ningún XML', makeZip({ 'foto.png': 'x' }), 'f.zip'],
+    ])('415: %s', async (_name, bytes, filename) => {
+      expect((await user.postForm('/api/uploads', form(bytes as Buffer | string, filename))).status).toBe(415);
+    });
   });
 
   it('un nombre malicioso se acepta pero NO es ruta: se guarda con otro nombre y se muestra saneado', async () => {

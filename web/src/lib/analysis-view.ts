@@ -36,6 +36,8 @@ export const ISSUE_LABELS: Record<Issue['code'], string> = {
   ambiguous_dates: 'Fechas ambiguas (se leyeron como día/mes/año)',
   text_trimmed: 'Texto con espacios o caracteres de más (se limpió)',
   text_truncated: 'Texto de más de 200 caracteres (se recortó)',
+  unsupported_document: 'Comprobantes que no son ventas ni gastos (pagos, traslados, nóminas)',
+  unsupported_currency: 'Comprobantes en otra moneda (solo se leen los de MXN)',
 };
 
 export type MappingField = 'date' | 'amount' | 'quantity' | 'product' | 'branch' | 'orderId';

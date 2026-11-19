@@ -8,7 +8,7 @@ usa por su cuenta. Antes de llegar aquí el archivo ya pasó la revisión profun
 import csv
 import io
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from openpyxl import load_workbook
 
@@ -23,6 +23,9 @@ Row = tuple[int, list[object]]  # (número de fila en el archivo, celdas)
 class Table:
     header: list[str]
     rows: Iterator[Row]  # solo datos (sin el encabezado), todas con el mismo ancho que el encabezado
+    # Lo que el LECTOR descartó antes de que hubiera filas (un CFDI que es un pago, o está en otra moneda): (código del
+    # problema, número de renglón, valor). La limpieza lo cuenta como leído y descartado: nada se pierde sin quedar contado.
+    skipped: list[tuple[str, int, str]] = field(default_factory=list)
 
 
 def _blank(cells: list[object]) -> bool:
@@ -86,7 +89,23 @@ def read_xlsx(data: bytes) -> Table:
     raise AnalysisFail("no_header")
 
 
+def read_cfdi(data: bytes, kind: str) -> Table:
+    # Se importan aquí (y no arriba) porque `cfdi_table` necesita `Table`, que vive en este módulo.
+    from .cfdi import parse_cfdi
+    from .cfdi_table import build_cfdi_table
+    from .cfdi_zip import read_cfdi_zip
+    from .verdict import Reject
+
+    try:
+        documents = [parse_cfdi(data)] if kind == "xml" else read_cfdi_zip(data)
+    except Reject:
+        raise AnalysisFail("unreadable") from None  # el motivo fino (not_cfdi, corrupt…) ya lo dio la revisión del archivo
+    return build_cfdi_table(documents)
+
+
 def read_table(data: bytes, kind: str) -> Table:
+    if kind in ("xml", "zip"):
+        return read_cfdi(data, kind)
     if kind == "csv":
         return read_csv(data)
     if kind == "xlsx":

@@ -5,6 +5,8 @@ import os
 import re
 import stat
 
+from .cfdi import parse_cfdi
+from .cfdi_zip import read_cfdi_zip
 from .inspect_csv import inspect_csv
 from .inspect_xlsx import inspect_xlsx
 from .limits import SECONDS_PER_FILE
@@ -57,6 +59,14 @@ def review(uploads_dir: str, job: Job) -> str | None:
                 if data.startswith(_PK):
                     raise Reject("corrupt")
                 inspect_csv(data)
+            elif job.kind == "xml":
+                if data.startswith(_PK):
+                    raise Reject("corrupt")
+                parse_cfdi(data)  # un solo comprobante: XML seguro (sin DOCTYPE) y con forma de CFDI
+            elif job.kind == "zip":
+                if not data.startswith(_PK):
+                    raise Reject("corrupt")
+                read_cfdi_zip(data)  # todas las entradas: UNA mala rechaza todo el ZIP
             else:
                 raise Reject("corrupt")
         return None

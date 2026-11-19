@@ -5,3 +5,6 @@
 # Datos de ejemplo GENERADOS (scripts/generar_cafe.py): son deterministas, se regeneran; no se versionan.
 datos-ejemplo/*.csv
 datos-ejemplo/manifiesto.json
+datos-ejemplo/cfdi-cafe.zip
+datos-ejemplo/cfdi-uno.xml
+datos-ejemplo/manifiesto-cfdi.json
