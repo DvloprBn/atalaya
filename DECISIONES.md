@@ -260,3 +260,11 @@
 - **UTF-8 y nada más:** UTF-16 (sus bytes nulos lo delatan) y latin1 se rechazan. Los CFDI del SAT son UTF-8.
 - **El mensaje de extensión no admitida** ahora lista los cuatro formatos. La revisión del navegador (`precheck`) y el `accept` del selector de archivos se actualizan en el paso de pantallas.
 - **Pruebas:** unitarias **283** (14 nuevas: aceptación con y sin BOM, 5 variantes de XXE y «billion laughs», DOCTYPE en mayúsculas y minúsculas, UTF-16 y latin1, un zip llamado `.xml`, un libro de Excel llamado `.zip`, y los dos límites); e2e de subidas **30** (11 nuevas, contra el sistema vivo: las dos aceptaciones y 10 rechazos 415). Mientras el worker no lea estos tipos, los archivos aceptados terminan `rejected / corrupt` sin tumbarlo (se comprobó: el worker sigue sano).
+
+## 2026-11-18 — v0.11, worker: reparto entre la puerta y el lector (diseño de Claude, dentro de lo aprobado)
+- **Dos barreras para un XML, cada una probada por su cuenta.** La API rechaza `<!DOCTYPE`/`<!ENTITY` de un `.xml` suelto (415, antes de guardar). **La API no abre ZIP**, así que dentro de un ZIP el único control es el worker (`defusedxml` con DTD prohibido): por eso hay e2e de XXE dentro de un ZIP contra el worker real, y la falla plantada se hizo sobre esa barrera.
+- **Un ZIP malo se rechaza entero** (una entrada que no es `.xml`, un ZIP anidado, un XML roto, un DOCTYPE): no se analiza «lo que sí se pudo», para no dar cifras de un archivo adulterado.
+- **Lo que no es venta ni gasto en pesos se descarta contado**, nunca en silencio: `unsupported_document` (pago, traslado, nómina) y `unsupported_currency`; ambos tiran el comprobante entero y cuentan como leídos y descartados (`rowsKept + rowsDropped = rowsRead`).
+- **La lista cerrada de problemas vive en dos sitios** (el contrato y `cleaner.py`): una prueba obliga a que sean iguales, porque el defecto fue justo ese (el código nuevo se perdía sin error).
+- **Topes del worker:** 1 MiB por XML, profundidad 20, 50 000 elementos, 4 000 caracteres por atributo, 500 entradas y 50 MB descomprimidos por ZIP.
+

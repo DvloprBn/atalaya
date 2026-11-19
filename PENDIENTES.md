@@ -54,9 +54,9 @@
 - ⏳ **Falta en v0.10:** reescribir `ESTADO_PROYECTO.md`; subir la rama, PR y CI (primera vez con `openpyxl`, el café y el tope general escalable en GitHub).
 - **Gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` puestas el 2026-11-19; `ESTADO_PROYECTO.md` al día.
 
-## Siguiente fase (v0.11) — avance 2026-11-19
-- ✅ Contrato (`kind` con `xml` y `zip`, motivo `not_cfdi`, problemas `unsupported_document` y `unsupported_currency`) y diseño en `DECISIONES.md`. Sin commit.
-- ✅ Migración `cfdi_kinds` (CHECK de `uploads.kind` y de `reject_reason` ampliados), probada. Sin commit.
-- ✅ API: la puerta de `.xml` y `.zip` por firma de bytes (283 unitarias, 30 e2e de subidas). Sin commit.
-- ⏳ **Falta en v0.11:** worker (lector seguro de CFDI y de ZIP, tabla virtual, descartes contados, revisión profunda con XXE); un generador de CFDI sintéticos con los RFC de pruebas del SAT; pantalla (tipo de archivo, aviso de que no es una herramienta fiscal, etiquetas); pruebas de ataque (XXE y compañía); laboratorio y capítulo; PR.
-- **Gestión:** etiqueta `v0.10` puesta el 2026-11-19 en `b5b4385`.
+## Siguiente fase (v0.11) — avance 2026-11-18
+- ✅ Contrato, migración `cfdi_kinds` y puerta de la API (`.xml` y `.zip` por firma). Comiteado.
+- ✅ Worker de CFDI: lector seguro, ZIP, tabla virtual, descartes contados, revisión profunda; 312 pruebas con el catálogo XXE. Comiteado.
+- ✅ e2e de CFDI contra el worker real (7: ZIP con cifras exactas, `.xml` suelto, XXE en `.xml` y dentro de ZIP, billion laughs, entradas malas, 501 entradas). Comiteado en el cierre.
+- ⏳ **Falta en v0.11:** pantalla (selector `.csv,.xlsx,.xml,.zip`, `precheck`, aviso «no es una herramienta fiscal», etiquetas; arreglar `archivos.spec.ts`); generador de CFDI sintéticos (RFC de pruebas del SAT, salida en `datos-ejemplo/`); laboratorio y capítulo; PR y CI; etiqueta `v0.11` (con permiso del dueño).
+- **Gestión:** `main` contiene v0.10; etiquetas `v0.1`–`v0.10` puestas.

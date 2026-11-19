@@ -262,3 +262,10 @@ class TestTheContractKnowsTheNewCodes:
         assert not errors and {i["code"] for i in report["issues"]} == {"unsupported_document"}
         reasons = doc["components"]["schemas"]["UploadRejectReason"]["enum"]
         assert {"not_cfdi", "corrupt", "range_too_large", "zip_bomb", "too_many_entries", "empty"} <= set(reasons)
+
+    def test_every_issue_code_of_the_contract_is_known_by_the_cleaner(self):
+        """La lista cerrada vive en el contrato y en la limpieza: si una crece sin la otra, el problema se pierde EN SILENCIO."""
+        from atalaya_worker.cleaner import CODE_ORDER
+
+        doc = yaml.safe_load((Path(__file__).parents[2] / "contracts" / "openapi.yaml").read_text(encoding="utf-8"))
+        assert set(CODE_ORDER) == set(doc["components"]["schemas"]["IssueCode"]["enum"])
