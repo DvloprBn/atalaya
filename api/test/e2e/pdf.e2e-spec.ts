@@ -137,7 +137,8 @@ describe('v0.12 · PDF en el worker (sistema vivo, worker real)', () => {
     const started = Date.now();
     expect(await send(pdf, 'bomba.pdf')).toMatchObject({ status: 'rejected', rejectReason: 'range_too_large' });
     expect(Date.now() - started).toBeLessThan(15_000);
-    expect((await user.get('/api/health')).body.checks.worker).toBe('ok');
-    expect((await send(makePdf([[['table', VENTAS]]]), 'despues.pdf')).status).toBe('accepted'); // prueba de vida
+    // Prueba de vida: el worker acepta el siguiente PDF. NO se pregunta a /api/health: el smoke del CI agota su tope
+    // a propósito justo antes de esta suite y respondería 429 (así falló en el CI; aquí se reiniciaba la API entre ambos).
+    expect((await send(makePdf([[['table', VENTAS]]]), 'despues.pdf')).status).toBe('accepted');
   });
 });
