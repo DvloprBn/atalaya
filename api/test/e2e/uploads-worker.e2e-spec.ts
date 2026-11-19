@@ -63,7 +63,8 @@ describe('v0.8 · revisión profunda del worker (sistema vivo)', () => {
     const bomb = workbook({ 'xl/padding.bin': Buffer.alloc(120 * 1024 * 1024) });
     expect(bomb.length).toBeLessThan(1_000_000);
     expect(await review(bomb, 'bomba.xlsx')).toMatchObject({ status: 'rejected', rejectReason: 'zip_bomb' });
-    expect(await review(csv(10), 'despues.csv')).toMatchObject({ status: 'accepted' }); // sigue atendiendo
-    expect((await new Browser().get('/api/health')).body.checks.worker).toBe('ok');
+    // Sigue atendiendo: lo demuestra trabajar otra vez. (No se pregunta a /api/health: tiene tope por IP y `smoke.sh`
+    // lo agota a propósito; en el CI corre justo antes y devolvía 429.)
+    expect(await review(csv(10), 'despues.csv')).toMatchObject({ status: 'accepted' });
   });
 });

@@ -182,7 +182,11 @@ describe('v0.9 · análisis (sistema vivo, worker real)', () => {
     const failed = await until(id, 'failed', 'awaiting_mapping');
     expect(failed).toMatchObject({ status: 'failed', failReason: 'unreadable', report: null });
     expect(JSON.stringify(failed)).not.toMatch(/Traceback|openpyxl|\.py/); // nunca texto de error interno
-    expect((await new Browser().get('/api/health')).body.checks.worker).toBe('ok');
+    // «El worker sigue vivo» se demuestra haciéndolo TRABAJAR otra vez, no preguntando a /api/health: esa ruta tiene
+    // tope por IP y `smoke.sh` lo agota a propósito (en el CI corre justo antes de estas pruebas y daba 429).
+    const next = await upload(csv('fecha,total', '2026-01-01,10'), 'despues.csv');
+    const again = (await user.post('/api/analyses', { uploadId: next })).body.id;
+    expect((await until(again, 'awaiting_mapping', 'failed')).status).toBe('awaiting_mapping');
   });
 
   it('fallos de contenido con motivo cerrado: sin columnas útiles, y «no quedó nada»', async () => {
