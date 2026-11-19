@@ -19,6 +19,7 @@ export const REJECT_LABELS: Record<string, string> = {
   corrupt: 'Está dañado o no cumple el formato de un CSV o un .xlsx sin macros.',
   empty: 'No tiene datos (está vacío o solo trae encabezado).',
   worker_timeout: 'La revisión tardó demasiado y se canceló.',
+  not_cfdi: 'No es un comprobante CFDI 3.3 o 4.0 válido (o alguno de los de un ZIP no lo es).',
 };
 
 /** ¿Falta que el worker lo resuelva? Mientras sea así, la tabla se vuelve a leer sola. */
