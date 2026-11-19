@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.9.0
+  version: 0.10.0
   license:
     name: MIT
     identifier: MIT
@@ -648,6 +648,28 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /profit:
+    get:
+      operationId: getProfit
+      summary: Resultado por mes (ventas menos gastos) de dos análisis míos
+      description: >
+        Combina un análisis de VENTAS y uno de GASTOS, ambos terminados, mes por mes. Los importes se restan en la API
+        con aritmética entera de centavos (nunca con números de punto flotante). Un mes que solo está en una de las
+        dos series cuenta como 0.00 en la otra. 404 si cualquiera de los dos no existe O es de otra cuenta; 409 si
+        alguno no está terminado; 400 si `sales` no es un análisis de ventas o `expenses` no es uno de gastos.
+      parameters:
+        - { name: sales, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: expenses, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: El resultado mensual y sus totales
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profit" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 components:
   parameters:
     AnalysisId:
@@ -1069,6 +1091,15 @@ components:
       required: [uploadId]
       properties:
         uploadId: { type: string, format: uuid }
+        kind:
+          $ref: "#/components/schemas/AnalysisKind"
+    AnalysisKind:
+      type: string
+      enum: [sales, expenses]
+      default: sales
+      description: >
+        Qué contiene el archivo: ventas (ingresos) o gastos. Se elige al crear y no cambia. La limpieza es la misma;
+        cambia lo que significa el informe, y solo un análisis de ventas y uno de gastos pueden combinarse en `getProfit`.
     AnalysisStatus:
       type: string
       enum: [previewing, awaiting_mapping, queued, running, done, failed]
@@ -1206,10 +1237,11 @@ components:
     Analysis:
       type: object
       additionalProperties: false
-      required: [id, uploadId, status, failReason, preview, mapping, report, createdAt, updatedAt]
+      required: [id, uploadId, kind, status, failReason, preview, mapping, report, insights, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         uploadId: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/AnalysisKind" }
         status: { $ref: "#/components/schemas/AnalysisStatus" }
         failReason:
           oneOf:
@@ -1227,6 +1259,11 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/QualityReport" }
             - { type: "null" }
+        insights:
+          description: Indicadores, Pareto, anomalías y pronóstico. Solo con el análisis terminado (null antes).
+          oneOf:
+            - { $ref: "#/components/schemas/Insights" }
+            - { type: "null" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     AnalysisPage:
@@ -1238,3 +1275,178 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    Money:
+      type: string
+      pattern: "^-?[0-9]+\\.[0-9]{2}$"
+      description: Importe como TEXTO decimal exacto con dos decimales (nunca un número de punto flotante).
+    Percent:
+      type: string
+      pattern: "^-?[0-9]+\\.[0-9]$"
+      description: Porcentaje como TEXTO decimal con un decimal (`12.5` es 12,5 %).
+    DayAmount:
+      type: object
+      additionalProperties: false
+      required: [date, amount]
+      properties:
+        date: { type: string, format: date }
+        amount: { $ref: "#/components/schemas/Money" }
+    Indicators:
+      type: object
+      additionalProperties: false
+      required: [grossAmount, returnsAmount, netAmount, rows, activeDays, averagePerActiveDay, orders, averageTicket, bestDay, worstDay]
+      properties:
+        grossAmount: { $ref: "#/components/schemas/Money", description: "Suma de los importes positivos." }
+        returnsAmount: { $ref: "#/components/schemas/Money", description: "Suma de los importes negativos, en positivo (devoluciones o notas de crédito)." }
+        netAmount: { $ref: "#/components/schemas/Money", description: "Bruto menos devoluciones; coincide con `totalAmount` del informe de calidad." }
+        rows: { type: integer, minimum: 1 }
+        activeDays: { type: integer, minimum: 1, description: "Días distintos con al menos una fila." }
+        averagePerActiveDay: { $ref: "#/components/schemas/Money" }
+        orders:
+          type: [integer, "null"]
+          description: Pedidos distintos. null si no se mapeó la columna de pedido o folio.
+        averageTicket:
+          description: Importe neto promedio por pedido. null si `orders` es null.
+          oneOf:
+            - { $ref: "#/components/schemas/Money" }
+            - { type: "null" }
+        bestDay:
+          oneOf:
+            - { $ref: "#/components/schemas/DayAmount" }
+            - { type: "null" }
+        worstDay:
+          oneOf:
+            - { $ref: "#/components/schemas/DayAmount" }
+            - { type: "null" }
+    MonthPoint:
+      type: object
+      additionalProperties: false
+      required: [month, amount, rows, changePercent]
+      properties:
+        month: { type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$" }
+        amount: { $ref: "#/components/schemas/Money" }
+        rows: { type: integer, minimum: 1 }
+        changePercent:
+          description: Cambio contra el mes anterior CON DATOS. null en el primer mes o si el anterior suma 0.
+          oneOf:
+            - { $ref: "#/components/schemas/Percent" }
+            - { type: "null" }
+    WeekdayPoint:
+      type: object
+      additionalProperties: false
+      required: [weekday, average, days]
+      properties:
+        weekday: { type: integer, minimum: 1, maximum: 7, description: "ISO: 1 = lunes … 7 = domingo." }
+        average: { $ref: "#/components/schemas/Money", description: "Promedio del total diario de ese día de la semana." }
+        days: { type: integer, minimum: 1, description: "Cuántos días de ese tipo con datos entran en el promedio." }
+    BranchPoint:
+      type: object
+      additionalProperties: false
+      required: [name, amount, sharePercent]
+      properties:
+        name: { type: string, maxLength: 200, description: "Texto del archivo (dato hostil): solo se muestra como texto." }
+        amount: { $ref: "#/components/schemas/Money" }
+        sharePercent: { $ref: "#/components/schemas/Percent" }
+    ParetoItem:
+      type: object
+      additionalProperties: false
+      required: [name, amount, sharePercent, cumulativePercent, class]
+      properties:
+        name: { type: string, maxLength: 200, description: "Texto del archivo (dato hostil): solo se muestra como texto." }
+        amount: { $ref: "#/components/schemas/Money" }
+        sharePercent: { $ref: "#/components/schemas/Percent" }
+        cumulativePercent: { $ref: "#/components/schemas/Percent" }
+        class: { type: string, enum: [A, B, C], description: "A = hasta el 80 % acumulado, B = hasta el 95 %, C = el resto." }
+    Pareto:
+      type: object
+      additionalProperties: false
+      required: [items, otherCount, otherAmount, nonPositiveCount]
+      properties:
+        items: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/ParetoItem" } }
+        otherCount: { type: integer, minimum: 0, description: "Elementos con importe positivo que no caben en `items` (los 20 mayores)." }
+        otherAmount: { $ref: "#/components/schemas/Money" }
+        nonPositiveCount: { type: integer, minimum: 0, description: "Elementos con total neto cero o negativo: no entran en el Pareto." }
+    Anomaly:
+      type: object
+      additionalProperties: false
+      required: [date, amount, expected, direction, score]
+      properties:
+        date: { type: string, format: date }
+        amount: { $ref: "#/components/schemas/Money" }
+        expected: { $ref: "#/components/schemas/Money", description: "Lo normal para ese día: la mediana del mismo día de la semana en las 5 semanas de cada lado." }
+        direction: { type: string, enum: [high, low] }
+        score: { type: string, pattern: "^[0-9]+\\.[0-9]$", description: "Puntaje robusto (MAD) en valor absoluto; se marca desde 3.5." }
+    Anomalies:
+      type: object
+      additionalProperties: false
+      required: [status, items]
+      properties:
+        status: { type: string, enum: [ok, insufficient_data], description: "Hacen falta al menos 28 días con datos Y que el 60 % de los días del rango los tengan: unos gastos espaciados (renta el 1, nómina el 15) no se analizan por día de la semana." }
+        items: { type: array, maxItems: 10, items: { $ref: "#/components/schemas/Anomaly" } }
+    ForecastPoint:
+      type: object
+      additionalProperties: false
+      required: [date, expected, lower, upper]
+      properties:
+        date: { type: string, format: date }
+        expected: { $ref: "#/components/schemas/Money" }
+        lower: { $ref: "#/components/schemas/Money" }
+        upper: { $ref: "#/components/schemas/Money" }
+    Forecast:
+      type: object
+      additionalProperties: false
+      required: [status, method, horizonDays, points, backtest]
+      properties:
+        status: { type: string, enum: [ok, insufficient_data], description: "Hacen falta al menos 8 semanas de historia (el rango de fechas) Y que el 60 % de los días del rango tengan datos: unas pocas filas sueltas en un rango largo, o gastos espaciados, no bastan." }
+        method: { type: string, enum: [weekday_average], description: "Promedio de las últimas 8 veces que cayó ese día de la semana. Un punto de partida honesto, NO un modelo predictivo." }
+        horizonDays: { type: integer, enum: [14] }
+        points: { type: array, maxItems: 14, items: { $ref: "#/components/schemas/ForecastPoint" } }
+        backtest:
+          description: Cómo le habría ido el mismo método a los últimos 14 días (sin verlos). Es la medida de cuánto fiarse.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [days, wape]
+              properties:
+                days: { type: integer, enum: [14] }
+                wape: { description: "Error absoluto ponderado: suma de |real − pronóstico| entre la suma de lo real. null si lo real suma 0.", oneOf: [{ $ref: "#/components/schemas/Percent" }, { type: "null" }] }
+            - { type: "null" }
+    Insights:
+      type: object
+      additionalProperties: false
+      required: [timezone, asOf, indicators, monthly, weekdays, branches, pareto, anomalies, forecast]
+      properties:
+        timezone: { type: string, enum: [America/Mexico_City], description: "Zona horaria del negocio: de ella sale «hoy» (fechas futuras y arranque del pronóstico)." }
+        asOf: { type: string, format: date, description: "La fecha de «hoy» en esa zona al calcular." }
+        indicators: { $ref: "#/components/schemas/Indicators" }
+        monthly: { type: array, items: { $ref: "#/components/schemas/MonthPoint" } }
+        weekdays: { type: array, maxItems: 7, items: { $ref: "#/components/schemas/WeekdayPoint" } }
+        branches:
+          description: Las 10 mayores sucursales por importe neto positivo. null si no se mapeó la columna de sucursal.
+          oneOf:
+            - { type: array, maxItems: 10, items: { $ref: "#/components/schemas/BranchPoint" } }
+            - { type: "null" }
+        pareto:
+          description: Qué pocos elementos concentran el importe. null si no se mapeó la columna de producto.
+          oneOf:
+            - { $ref: "#/components/schemas/Pareto" }
+            - { type: "null" }
+        anomalies: { $ref: "#/components/schemas/Anomalies" }
+        forecast: { $ref: "#/components/schemas/Forecast" }
+    ProfitMonth:
+      type: object
+      additionalProperties: false
+      required: [month, sales, expenses, result]
+      properties:
+        month: { type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$" }
+        sales: { $ref: "#/components/schemas/Money" }
+        expenses: { $ref: "#/components/schemas/Money" }
+        result: { $ref: "#/components/schemas/Money", description: "Ventas menos gastos; puede ser negativo." }
+    Profit:
+      type: object
+      additionalProperties: false
+      required: [months, salesTotal, expensesTotal, resultTotal]
+      properties:
+        months: { type: array, items: { $ref: "#/components/schemas/ProfitMonth" } }
+        salesTotal: { $ref: "#/components/schemas/Money" }
+        expensesTotal: { $ref: "#/components/schemas/Money" }
+        resultTotal: { $ref: "#/components/schemas/Money" }

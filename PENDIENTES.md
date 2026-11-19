@@ -44,3 +44,12 @@
 - ✅ Laboratorio v0.9 (33 fichas) y capítulo v0.9 de la guía.
 - ⏳ **Falta en v0.9:** verificar el CI de GitHub (también el de v0.8, que sigue sin PR); push y PR.
 - **Pendiente sin fase asignada:** CSV en latin1 (lo típico de Excel en español; se rechaza desde v0.8 y en v0.9 no se resolvió); solo se lee la primera hoja de un `.xlsx`.
+
+## Siguiente fase (v0.10) — avance 2026-11-19
+- ✅ Contrato (`kind`, `insights`, `GET /profit`), migración `analysis_insights` con sus CHECK y el permiso del worker, `permisos-worker.sh` ampliado (42 comprobaciones). Sin commit.
+- ✅ API: `kind` al crear, `kind` e `insights` en la vista y `GET /profit` con centavos en `BigInt` (33 pruebas unitarias nuevas, 269 en total; e2e 111). Sin commit.
+- ✅ Worker de indicadores (zona horaria, indicadores, Pareto, anomalías, pronóstico con su backtest), conformidad con el contrato como prueba y 3 e2e con el worker real; el tope general escala con `THROTTLE_SCALE`. Worker 234 pruebas. Datos de ejemplo del café ficticio (`scripts/generar_cafe.py`): su prueba de punta a punta corrigió tres defectos (baseline de anomalías, gastos espaciados, sinónimo de «categoría»). Sin commit.
+- ✅ Pantallas de v0.10 (informe con gráficas y su tabla, `/resultado`, tipo ventas o gastos): 5 pruebas nuevas en Chrome real (suite completa: 32). Sin commit.
+- ✅ Laboratorio v0.10 (32 fichas) y capítulo v0.10 de la guía.
+- ⏳ **Falta en v0.10:** reescribir `ESTADO_PROYECTO.md`; subir la rama, PR y CI (primera vez con `openpyxl`, el café y el tope general escalable en GitHub).
+- **Pendientes de gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` (con permiso del dueño); `ESTADO_PROYECTO.md` desactualizado (al cerrar v0.10).

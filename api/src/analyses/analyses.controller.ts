@@ -6,7 +6,8 @@ import { type AuthUser, CurrentUser } from '../auth/current-user.decorator.js';
 import { scaled } from '../common/http/throttle.js';
 import { PageQuery } from '../uploads/dto.js';
 import { AnalysesService } from './analyses.service.js';
-import { CreateAnalysisDto, MappingDto } from './dto.js';
+import { CreateAnalysisDto, MappingDto, ProfitQuery } from './dto.js';
+import { ProfitService } from './profit.service.js';
 import { RESULT_KINDS, type ResultKind, ResultsStorage } from './results-storage.js';
 
 // Todas las rutas piden sesión (cerrado por defecto) y todo es de su dueño: lo ajeno responde 404.
@@ -18,7 +19,7 @@ export class AnalysesController {
   @HttpCode(202)
   @Throttle({ default: { limit: scaled(10), ttl: 60_000 } })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateAnalysisDto) {
-    return this.analyses.create(user, dto.uploadId);
+    return this.analyses.create(user, dto.uploadId, dto.kind);
   }
 
   @Get()
@@ -62,9 +63,20 @@ export class AnalysesController {
   }
 }
 
+/** Ventas menos gastos: combina dos análisis míos. La cuenta de dinero vive en `profit.service.ts` (centavos enteros). */
+@Controller('profit')
+export class ProfitController {
+  constructor(private readonly profit: ProfitService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser, @Query() query: ProfitQuery) {
+    return this.profit.profit(user, query.sales, query.expenses);
+  }
+}
+
 @Module({
-  controllers: [AnalysesController],
-  providers: [AnalysesService, ResultsStorage],
+  controllers: [AnalysesController, ProfitController],
+  providers: [AnalysesService, ResultsStorage, ProfitService],
   exports: [ResultsStorage],
 })
 export class AnalysesModule {}

@@ -16,6 +16,7 @@ from .failure import AnalysisFail
 from .limits import EXAMPLES_PER_ISSUE, MAX_TEXT, SAMPLE_LEN
 from .tabular import Table
 from .text import cell_text, clean_text
+from .tz import business_today
 from .values import decide_date_order, decide_decimal_separator, money, parse_amount, parse_date
 
 FIELDS = ("date", "amount", "quantity", "product", "branch", "orderId")
@@ -71,7 +72,9 @@ class _Issues:
 def clean(table: Table, mapping: dict, today: date | None = None) -> tuple[list[CleanRow], dict]:
     cols = check_mapping(mapping, len(table.header))
     rows = list(table.rows)  # ≤ 50 000 filas: hace falta verlas todas para decidir el formato de la columna
-    limit = (today or date.today()) + timedelta(days=1)  # un día de holgura por la zona horaria
+    # «Hoy» es el de la zona del NEGOCIO (no el UTC del contenedor: de 18:00 a 24:00 en México ya sería mañana).
+    # Más un día de holgura: un archivo exportado desde otra zona puede traer la fecha de mañana.
+    limit = (today or business_today()) + timedelta(days=1)
 
     # Formatos: lo que pidió la persona, o lo que dicen los datos de TODA la columna.
     order, evidence = (mapping.get("dateOrder") or "auto"), True

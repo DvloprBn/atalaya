@@ -21,6 +21,13 @@
   --anomaly: #f5a524;
   --danger: #ff8a8a;
 
+  /* Colores de las MARCAS de las gráficas (barras, líneas). Son los mismos tonos de --signal y --anomaly pero dentro de la
+     banda de luminosidad que admite una marca sobre fondo oscuro (L 0.48–0.67 en OKLCH); validados con el script de la guía
+     de visualización: separación para daltónicos ΔE 13.3 (mínimo 8) y contraste ≥ 3:1 contra --surface. Los textos NUNCA
+     llevan estos colores: la identidad la da la marca de al lado, y todo dato también está en una tabla. */
+  --chart-main: #22a193;
+  --chart-alert: #c98312;
+
   --radius: 10px;
   --gap: 16px;
   --font-sans: var(--font-inter), system-ui, sans-serif;
@@ -115,5 +122,5 @@ th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .chip[data-state='ok']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 .chip[data-state='down']::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--anomaly); }
 
-/* Texto solo para lectores de pantalla (p. ej. la cabecera de una columna de botones). */
-.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Texto solo para lectores de pantalla (p. ej. la cabecera de una columna de botones). Con left/top fijos: sin ellos, dentro de una tabla que se desplaza caía en su posición natural (fuera del recorte) y empujaba la página a los lados. */
+.sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

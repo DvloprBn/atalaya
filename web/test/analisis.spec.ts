@@ -53,7 +53,7 @@ test.describe('Análisis', () => {
     const row = page.getByRole('row').filter({ hasText: 'ventas.csv' });
     await expect(row.getByText('aceptado')).toBeVisible({ timeout: 20_000 });
 
-    await row.getByRole('button', { name: /^Analizar/ }).click();
+    await row.getByRole('button', { name: /^Analizar ventas/ }).click();
     await page.waitForURL(/\/analisis\/[0-9a-f-]{36}$/);
     analysisUrl = page.url();
     await expect(page.getByRole('heading', { name: '¿Qué columna es cada dato?' })).toBeVisible({ timeout: 20_000 });

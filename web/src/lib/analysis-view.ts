@@ -54,18 +54,61 @@ export const FIELD_LABELS = Object.fromEntries(FIELDS.map((f) => [f.key, f.label
 export const isWorking = (a: Pick<Analysis, 'status'>) => ['previewing', 'queued', 'running'].includes(a.status);
 
 /** Revisión de cortesía del mapeo (la API vuelve a validar): ¿hay dos campos en la misma columna? */
-export function duplicateColumn(mapping: Partial<Record<MappingField, number>>): string | null {
+export function duplicateColumn(mapping: Partial<Record<MappingField, number>>, kind: Analysis['kind'] = 'sales'): string | null {
   const used = new Map<number, MappingField>();
   for (const { key } of FIELDS) {
     const index = mapping[key];
     if (index === undefined) continue;
     const other = used.get(index);
-    if (other) return `«${FIELD_LABELS[other]}» y «${FIELD_LABELS[key]}» no pueden ser la misma columna.`;
+    if (other) return `«${fieldLabel(kind, other)}» y «${fieldLabel(kind, key)}» no pueden ser la misma columna.`;
     used.set(index, key);
   }
   return null;
 }
 
 export type { AnalysisMapping };
-export const money = (text: string) => Number(text).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-export const day = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('es-MX', { dateStyle: 'medium' }) : '—');
+
+/**
+ * Importe `-1234567.50` → `-$1,234,567.50`, trabajando con el TEXTO. Pasarlo por `Number` perdería dígitos con cifras
+ * grandes (un total de 50 000 filas puede pasar de 2^53), y el dinero del contrato es texto decimal exacto a propósito.
+ */
+export function money(text: string): string {
+  const match = /^(-?)(\d+)(\.\d+)?$/.exec(text);
+  if (!match) return text; // lo que no es un importe se muestra tal cual: nunca se «arregla»
+  return `${match[1]}$${match[2].replace(/\B(?=(\d{3})+$)/g, ',')}${match[3] ?? ''}`;
+}
+
+// Las fechas se interpretan en UTC a propósito: «2026-03-01» no debe caer en febrero por la zona horaria del navegador.
+export const day = (iso: string | null) =>
+  iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString('es-MX', { dateStyle: 'medium', timeZone: 'UTC' }) : '—';
+export const dayShort = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+export const monthLabel = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString('es-MX', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+export const KIND_LABELS: Record<Analysis['kind'], string> = { sales: 'ventas', expenses: 'gastos' };
+
+/** «producto» en ventas es «categoría» en gastos: el campo del contrato es el mismo (`product`); cambia el nombre. */
+export const fieldLabel = (kind: Analysis['kind'], key: MappingField) =>
+  key === 'product' && kind === 'expenses' ? 'Categoría del gasto' : FIELD_LABELS[key];
+
+export const WEEKDAYS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']; // ISO: 1 = lunes
+
+export const percentText = (text: string) => `${text} %`;
+export const signedPercent = (text: string) => `${text.startsWith('-') ? '' : '+'}${text} %`;
+
+export const CLASS_LABELS: Record<string, string> = { A: 'A · concentra el 80 %', B: 'B · hasta el 95 %', C: 'C · el resto' };
+
+/**
+ * Los meses de los extremos que el archivo NO cubre completos (empieza el 18 o termina el 17): su barra es baja por falta de
+ * días, no por falta de ventas, y sin decirlo la gráfica engaña. Devuelve `AAAA-MM` → qué falta.
+ */
+export function partialMonths(from: string | null, to: string | null): Map<string, string> {
+  const partial = new Map<string, string>();
+  if (from && Number(from.slice(8, 10)) > 1) partial.set(from.slice(0, 7), `empieza el ${dayShort(from)}`);
+  if (to) {
+    const [y, m, d] = to.split('-').map(Number);
+    if (d < new Date(Date.UTC(y, m, 0)).getUTCDate()) partial.set(to.slice(0, 7), `termina el ${dayShort(to)}`);
+  }
+  return partial;
+}

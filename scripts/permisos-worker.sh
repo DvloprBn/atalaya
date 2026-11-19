@@ -36,6 +36,8 @@ allowed "unir un análisis con su archivo (lo que lee el worker para trabajar)" 
   "SELECT u.storage_key, u.kind, u.sha256, u.size_bytes, a.mapping FROM analyses a JOIN uploads u ON u.id = a.upload_id LIMIT 1"
 allowed "actualizar estado, vista previa, informe, motivo y fecha de un análisis" \
   "UPDATE analyses SET status = 'failed', preview = NULL, report = NULL, fail_reason = 'unreadable', updated_at = now() WHERE false"
+allowed "escribir los indicadores (insights) de un análisis" \
+  "UPDATE analyses SET insights = NULL WHERE false"
 
 echo "Postgres: lo que NO puede"
 denied "leer cuentas (users)"                "SELECT email FROM users LIMIT 1"
@@ -54,6 +56,9 @@ denied "crear roles"                         "CREATE ROLE intruso"
 denied "leer de quién es un análisis"        "SELECT owner_id FROM analyses LIMIT 1"
 denied "cambiar el mapeo que confirmó la persona" "UPDATE analyses SET mapping = NULL WHERE false"
 denied "cambiar el nombre de los resultados" "UPDATE analyses SET result_key = result_key WHERE false"
+denied "leer el tipo del análisis (kind)"    "SELECT kind FROM analyses LIMIT 1"
+denied "cambiar el tipo del análisis"        "UPDATE analyses SET kind = 'sales' WHERE false"
+denied "leer los indicadores ya escritos"    "SELECT insights FROM analyses LIMIT 1"
 denied "borrar análisis"                     "DELETE FROM analyses WHERE false"
 denied "insertar análisis"                   "INSERT INTO analyses(id) VALUES (gen_random_uuid())"
 

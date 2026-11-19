@@ -1,7 +1,7 @@
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin: 0; }
 .tile { background: var(--surface-sunken); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .tile dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-.tile dd { margin: 0; font-family: var(--font-mono); font-size: 20px; overflow-wrap: anywhere; }
+.tile dd { margin: 0; font-family: var(--font-mono); font-size: 20px; overflow-wrap: break-word; } /* break-word, no anywhere: un importe no se parte a la mitad si cabe en su línea */
 .tile[data-flag='warn'] { border-color: var(--anomaly); }
 
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; border: 0; padding: 0; margin: 0; }
@@ -13,3 +13,9 @@
 
 .examples { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; color: var(--muted); }
 .examples code { font-family: var(--font-mono); color: var(--text); background: var(--surface-sunken); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+
+.share { display: flex; align-items: center; gap: 10px; min-width: 150px; }
+.shareBar { display: block; height: 8px; border-radius: 4px; background: var(--chart-main); flex: 0 1 auto; min-width: 2px; max-width: 110px; }
+
+/* Una tabla con muchas columnas no se aplasta en un teléfono hasta partir las palabras: conserva un ancho y se desplaza. */
+.wideTable { min-width: 520px; }

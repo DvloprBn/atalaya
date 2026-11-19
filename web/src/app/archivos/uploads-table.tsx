@@ -10,9 +10,9 @@ export function UploadsTable({ items, onChanged }: { items: Upload[]; onChanged:
   const [error, setError] = useState('');
 
   /** Empieza el análisis de este archivo y abre su pantalla (ahí se confirman las columnas). */
-  async function analyze(upload: Upload) {
+  async function analyze(upload: Upload, kind: Analysis['kind']) {
     setError('');
-    const res = await api.post<Analysis>('/api/analyses', { uploadId: upload.id });
+    const res = await api.post<Analysis>('/api/analyses', { uploadId: upload.id, kind });
     if (res.ok && res.data) router.push(`/analisis/${res.data.id}`);
     else setError(res.message ?? 'No se pudo empezar el análisis.');
   }
@@ -59,9 +59,14 @@ export function UploadsTable({ items, onChanged }: { items: Upload[]; onChanged:
               <td className="mono">{when(u.createdAt)}</td>
               <td className="row">
                 {u.status === 'accepted' && (
-                  <button onClick={() => analyze(u)} aria-label={`Analizar ${u.displayName ?? 'archivo'}`}>
-                    Analizar
-                  </button>
+                  <>
+                    <button onClick={() => analyze(u, 'sales')} aria-label={`Analizar ventas de ${u.displayName ?? 'archivo'}`}>
+                      Analizar ventas
+                    </button>
+                    <button className="secondary" onClick={() => analyze(u, 'expenses')} aria-label={`Analizar gastos de ${u.displayName ?? 'archivo'}`}>
+                      Analizar gastos
+                    </button>
+                  </>
                 )}
                 <button className="secondary" onClick={() => remove(u)} aria-label={`Borrar ${u.displayName ?? 'archivo'}`}>
                   Borrar

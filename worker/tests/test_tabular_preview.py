@@ -94,6 +94,10 @@ class TestPreview:
         assert preview["suggested"] == {"date": 0, "amount": 1, "quantity": 2, "product": 3, "branch": 4, "orderId": 5}
         assert preview["rowCount"] == 1
 
+    def test_a_category_column_is_the_element_of_an_expense(self):
+        table = read_table(csv_from(["Fecha", "Categoría", "Sucursal", "Importe"], ["2026-01-05", "luz", "norte", "100"]), "csv")
+        assert build_preview(table)["suggested"] == {"date": 0, "product": 1, "branch": 2, "amount": 3}
+
     def test_falls_back_to_content_for_date_and_amount(self):
         rows = "\n".join(f"{n},2026-01-{n:02d},{n * 7}.50" for n in range(1, 10))
         preview = build_preview(read_table(csv_bytes("col a,col b,col c\n" + rows + "\n"), "csv"))

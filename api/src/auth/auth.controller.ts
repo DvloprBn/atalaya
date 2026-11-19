@@ -88,10 +88,7 @@ export class AuthController {
     clearSessionCookies(res);
   }
 
-  // La pide CADA pantalla al cargar. Igual que el tope general (60/min por IP), pero escalable en desarrollo y CI:
-  // las suites de Chrome salen de una sola IP y juntas cargan más pantallas por minuto que una persona.
   @Get('me')
-  @Throttle({ default: { limit: scaled(60), ttl: MIN } })
   me(@CurrentUser() user: AuthUser): PublicUser {
     return { id: user.id, email: user.email, role: user.role };
   }

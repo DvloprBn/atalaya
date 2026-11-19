@@ -10,8 +10,8 @@ const USER = { id: 'u1', email: 'ana@example.com', role: { name: 'usuario', leve
 const KEY = 'a'.repeat(32);
 const NOW = new Date('2026-11-18T12:00:00Z');
 const row = (over: Record<string, unknown> = {}) => ({
-  id: 'an1', ownerId: 'u1', uploadId: 'up1', status: 'awaiting_mapping', failReason: null,
-  preview: { columns: [{}, {}, {}, {}] }, mapping: null, report: null, resultKey: KEY, createdAt: NOW, updatedAt: NOW, ...over,
+  id: 'an1', ownerId: 'u1', uploadId: 'up1', kind: 'sales', status: 'awaiting_mapping', failReason: null,
+  preview: { columns: [{}, {}, {}, {}] }, mapping: null, report: null, insights: null, resultKey: KEY, createdAt: NOW, updatedAt: NOW, ...over,
 });
 
 function build(opts: { upload?: unknown; count?: number; analysis?: unknown; moved?: number; redisFails?: boolean; createError?: Error } = {}) {
@@ -51,6 +51,23 @@ describe('AnalysesService.create', () => {
     expect(redis.client.xadd).toHaveBeenCalledWith('atalaya:analyses', 'MAXLEN', '~', 10_000, '*', 'id', 'an1');
     expect(Object.keys(out)).not.toContain('resultKey');
     expect(Object.keys(out)).not.toContain('ownerId');
+  });
+
+  it('el tipo es ventas por omisión y se puede pedir gastos', async () => {
+    const sales = build();
+    await sales.service.create(USER, 'up1');
+    expect(sales.tx.analysis.create.mock.calls[0][0].data.kind).toBe('sales');
+    const expenses = build();
+    await expenses.service.create(USER, 'up1', 'expenses');
+    expect(expenses.tx.analysis.create.mock.calls[0][0].data.kind).toBe('expenses');
+  });
+
+  it('la vista trae el tipo y los indicadores, y nunca el dueño ni la llave de resultados', async () => {
+    const out = await build().service.create(USER, 'up1');
+    expect(out).toMatchObject({ kind: 'sales', insights: null });
+    expect(Object.keys(out).sort()).toEqual(
+      ['createdAt', 'failReason', 'id', 'insights', 'kind', 'mapping', 'preview', 'report', 'status', 'updatedAt', 'uploadId'],
+    );
   });
 
   it('un archivo ajeno o inexistente es 404 (el filtro por dueño va en la consulta)', async () => {

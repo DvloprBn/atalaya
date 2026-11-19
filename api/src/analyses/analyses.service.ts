@@ -31,7 +31,7 @@ export class AnalysesService {
   ) {}
 
   /** Paso 1: empieza el análisis de un archivo mío ya aceptado. El worker prepara la vista previa. */
-  async create(user: AuthUser, uploadId: string) {
+  async create(user: AuthUser, uploadId: string, kind: 'sales' | 'expenses' = 'sales') {
     // Un archivo ajeno responde 404, igual que uno que no existe (OWASP API1).
     const upload = await this.prisma.upload.findFirst({ where: { id: uploadId, ownerId: user.id, deleteRequestedAt: null } });
     if (!upload) throw new NotFoundException();
@@ -46,7 +46,7 @@ export class AnalysesService {
           throw new ConflictException(`Máximo ${MAX_ANALYSES_PER_ACCOUNT} análisis por cuenta: borra alguno antes de empezar otro`);
         }
         // La llave de los archivos de resultados la pone la API; el worker nunca inventa nombres de archivo.
-        return tx.analysis.create({ data: { ownerId: user.id, uploadId, resultKey: randomUUID().replaceAll('-', '') } });
+        return tx.analysis.create({ data: { ownerId: user.id, uploadId, kind, resultKey: randomUUID().replaceAll('-', '') } });
       });
     } catch (error) {
       // El archivo se borró entre leerlo y crear el análisis: es un «no existe», no un fallo del servidor.

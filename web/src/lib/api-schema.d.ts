@@ -726,6 +726,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resultado por mes (ventas menos gastos) de dos análisis míos
+         * @description Combina un análisis de VENTAS y uno de GASTOS, ambos terminados, mes por mes. Los importes se restan en la API con aritmética entera de centavos (nunca con números de punto flotante). Un mes que solo está en una de las dos series cuenta como 0.00 en la otra. 404 si cualquiera de los dos no existe O es de otra cuenta; 409 si alguno no está terminado; 400 si `sales` no es un análisis de ventas o `expenses` no es uno de gastos.
+         */
+        get: operations["getProfit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -968,7 +988,14 @@ export interface components {
         CreateAnalysisRequest: {
             /** Format: uuid */
             uploadId: string;
+            kind?: components["schemas"]["AnalysisKind"];
         };
+        /**
+         * @description Qué contiene el archivo: ventas (ingresos) o gastos. Se elige al crear y no cambia. La limpieza es la misma; cambia lo que significa el informe, y solo un análisis de ventas y uno de gastos pueden combinarse en `getProfit`.
+         * @default sales
+         * @enum {string}
+         */
+        AnalysisKind: "sales" | "expenses";
         /**
          * @description previewing = el worker lee el archivo · awaiting_mapping = espera que confirmes las columnas · queued/running = limpiando · done = hay informe y descargas · failed = ver `failReason`.
          * @enum {string}
@@ -1067,11 +1094,14 @@ export interface components {
             id: string;
             /** Format: uuid */
             uploadId: string;
+            kind: components["schemas"]["AnalysisKind"];
             status: components["schemas"]["AnalysisStatus"];
             failReason: components["schemas"]["AnalysisFailReason"] | null;
             preview: components["schemas"]["AnalysisPreview"] | null;
             mapping: components["schemas"]["Mapping"] | null;
             report: components["schemas"]["QualityReport"] | null;
+            /** @description Indicadores, Pareto, anomalías y pronóstico. Solo con el análisis terminado (null antes). */
+            insights: components["schemas"]["Insights"] | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1082,6 +1112,156 @@ export interface components {
             page: number;
             pageSize: number;
             total: number;
+        };
+        /** @description Importe como TEXTO decimal exacto con dos decimales (nunca un número de punto flotante). */
+        Money: string;
+        /** @description Porcentaje como TEXTO decimal con un decimal (`12.5` es 12,5 %). */
+        Percent: string;
+        DayAmount: {
+            /** Format: date */
+            date: string;
+            amount: components["schemas"]["Money"];
+        };
+        Indicators: {
+            /** @description Suma de los importes positivos. */
+            grossAmount: components["schemas"]["Money"];
+            /** @description Suma de los importes negativos, en positivo (devoluciones o notas de crédito). */
+            returnsAmount: components["schemas"]["Money"];
+            /** @description Bruto menos devoluciones; coincide con `totalAmount` del informe de calidad. */
+            netAmount: components["schemas"]["Money"];
+            rows: number;
+            /** @description Días distintos con al menos una fila. */
+            activeDays: number;
+            averagePerActiveDay: components["schemas"]["Money"];
+            /** @description Pedidos distintos. null si no se mapeó la columna de pedido o folio. */
+            orders: number | null;
+            /** @description Importe neto promedio por pedido. null si `orders` es null. */
+            averageTicket: components["schemas"]["Money"] | null;
+            bestDay: components["schemas"]["DayAmount"] | null;
+            worstDay: components["schemas"]["DayAmount"] | null;
+        };
+        MonthPoint: {
+            month: string;
+            amount: components["schemas"]["Money"];
+            rows: number;
+            /** @description Cambio contra el mes anterior CON DATOS. null en el primer mes o si el anterior suma 0. */
+            changePercent: components["schemas"]["Percent"] | null;
+        };
+        WeekdayPoint: {
+            /** @description ISO: 1 = lunes … 7 = domingo. */
+            weekday: number;
+            /** @description Promedio del total diario de ese día de la semana. */
+            average: components["schemas"]["Money"];
+            /** @description Cuántos días de ese tipo con datos entran en el promedio. */
+            days: number;
+        };
+        BranchPoint: {
+            /** @description Texto del archivo (dato hostil): solo se muestra como texto. */
+            name: string;
+            amount: components["schemas"]["Money"];
+            sharePercent: components["schemas"]["Percent"];
+        };
+        ParetoItem: {
+            /** @description Texto del archivo (dato hostil): solo se muestra como texto. */
+            name: string;
+            amount: components["schemas"]["Money"];
+            sharePercent: components["schemas"]["Percent"];
+            cumulativePercent: components["schemas"]["Percent"];
+            /**
+             * @description A = hasta el 80 % acumulado, B = hasta el 95 %, C = el resto.
+             * @enum {string}
+             */
+            class: "A" | "B" | "C";
+        };
+        Pareto: {
+            items: components["schemas"]["ParetoItem"][];
+            /** @description Elementos con importe positivo que no caben en `items` (los 20 mayores). */
+            otherCount: number;
+            otherAmount: components["schemas"]["Money"];
+            /** @description Elementos con total neto cero o negativo: no entran en el Pareto. */
+            nonPositiveCount: number;
+        };
+        Anomaly: {
+            /** Format: date */
+            date: string;
+            amount: components["schemas"]["Money"];
+            /** @description Lo normal para ese día: la mediana del mismo día de la semana en las 5 semanas de cada lado. */
+            expected: components["schemas"]["Money"];
+            /** @enum {string} */
+            direction: "high" | "low";
+            /** @description Puntaje robusto (MAD) en valor absoluto; se marca desde 3.5. */
+            score: string;
+        };
+        Anomalies: {
+            /**
+             * @description Hacen falta al menos 28 días con datos Y que el 60 % de los días del rango los tengan: unos gastos espaciados (renta el 1, nómina el 15) no se analizan por día de la semana.
+             * @enum {string}
+             */
+            status: "ok" | "insufficient_data";
+            items: components["schemas"]["Anomaly"][];
+        };
+        ForecastPoint: {
+            /** Format: date */
+            date: string;
+            expected: components["schemas"]["Money"];
+            lower: components["schemas"]["Money"];
+            upper: components["schemas"]["Money"];
+        };
+        Forecast: {
+            /**
+             * @description Hacen falta al menos 8 semanas de historia (el rango de fechas) Y que el 60 % de los días del rango tengan datos: unas pocas filas sueltas en un rango largo, o gastos espaciados, no bastan.
+             * @enum {string}
+             */
+            status: "ok" | "insufficient_data";
+            /**
+             * @description Promedio de las últimas 8 veces que cayó ese día de la semana. Un punto de partida honesto, NO un modelo predictivo.
+             * @enum {string}
+             */
+            method: "weekday_average";
+            /** @enum {integer} */
+            horizonDays: 14;
+            points: components["schemas"]["ForecastPoint"][];
+            /** @description Cómo le habría ido el mismo método a los últimos 14 días (sin verlos). Es la medida de cuánto fiarse. */
+            backtest: {
+                /** @enum {integer} */
+                days: 14;
+                /** @description Error absoluto ponderado: suma de |real − pronóstico| entre la suma de lo real. null si lo real suma 0. */
+                wape: components["schemas"]["Percent"] | null;
+            } | null;
+        };
+        Insights: {
+            /**
+             * @description Zona horaria del negocio: de ella sale «hoy» (fechas futuras y arranque del pronóstico).
+             * @enum {string}
+             */
+            timezone: "America/Mexico_City";
+            /**
+             * Format: date
+             * @description La fecha de «hoy» en esa zona al calcular.
+             */
+            asOf: string;
+            indicators: components["schemas"]["Indicators"];
+            monthly: components["schemas"]["MonthPoint"][];
+            weekdays: components["schemas"]["WeekdayPoint"][];
+            /** @description Las 10 mayores sucursales por importe neto positivo. null si no se mapeó la columna de sucursal. */
+            branches: components["schemas"]["BranchPoint"][] | null;
+            /** @description Qué pocos elementos concentran el importe. null si no se mapeó la columna de producto. */
+            pareto: components["schemas"]["Pareto"] | null;
+            anomalies: components["schemas"]["Anomalies"];
+            forecast: components["schemas"]["Forecast"];
+        };
+        ProfitMonth: {
+            month: string;
+            sales: components["schemas"]["Money"];
+            expenses: components["schemas"]["Money"];
+            /** @description Ventas menos gastos; puede ser negativo. */
+            result: components["schemas"]["Money"];
+        };
+        Profit: {
+            months: components["schemas"]["ProfitMonth"][];
+            salesTotal: components["schemas"]["Money"];
+            expensesTotal: components["schemas"]["Money"];
+            resultTotal: components["schemas"]["Money"];
         };
     };
     responses: {
@@ -2062,6 +2242,33 @@ export interface operations {
                 };
                 content: {
                     "text/csv": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    getProfit: {
+        parameters: {
+            query: {
+                sales: string;
+                expenses: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El resultado mensual y sus totales */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profit"];
                 };
             };
             400: components["responses"]["Error"];

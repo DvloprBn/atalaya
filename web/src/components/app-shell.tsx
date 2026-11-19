@@ -29,6 +29,7 @@ export function AppShell({ user, children }: { user: PublicUser; children: React
           <a href="/cuenta">Mi cuenta</a>
           <a href="/archivos">Mis archivos</a>
           <a href="/analisis">Mis análisis</a>
+          <a href="/resultado">Resultado</a>
           <a href="/cuenta/seguridad">Seguridad</a>
           {user.role.level >= ADMIN_LEVEL && <a href="/admin">Administración de cuentas</a>}
           {user.role.level >= ADMIN_LEVEL && <a href="/admin/archivos">Archivos de las cuentas</a>}
