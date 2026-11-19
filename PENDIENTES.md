@@ -48,5 +48,6 @@
 ## Siguiente fase (v0.10) — avance 2026-11-19
 - ✅ Contrato (`kind`, `insights`, `GET /profit`), migración `analysis_insights` con sus CHECK y el permiso del worker, `permisos-worker.sh` ampliado (42 comprobaciones). Sin commit.
 - ✅ API: `kind` al crear, `kind` e `insights` en la vista y `GET /profit` con centavos en `BigInt` (33 pruebas unitarias nuevas, 269 en total; e2e 111). Sin commit.
-- ⏳ **Falta en v0.10:** worker (`tzdata`, «hoy» en `America/Mexico_City` también para v0.9, indicadores, Pareto, anomalías, pronóstico con su backtest); pantallas (informe con gráficas y su tabla equivalente, y la vista de resultado ventas menos gastos); pruebas de ataque (dinero en `Decimal`, zona horaria, IDOR del resultado); laboratorio y capítulo; PR.
+- ✅ Worker de indicadores (zona horaria, indicadores, Pareto, anomalías, pronóstico con su backtest), conformidad con el contrato como prueba y 3 e2e con el worker real; el tope general escala con `THROTTLE_SCALE`. Worker 234 pruebas. Datos de ejemplo del café ficticio (`scripts/generar_cafe.py`): su prueba de punta a punta corrigió tres defectos (baseline de anomalías, gastos espaciados, sinónimo de «categoría»). Sin commit.
+- ⏳ **Falta en v0.10:** pantallas (informe con gráficas y su tabla equivalente, y la vista de resultado ventas menos gastos); pruebas de ataque (dinero en `Decimal`, zona horaria, IDOR del resultado); laboratorio y capítulo; PR.
 - **Pendientes de gestión:** etiquetas `v0.7`, `v0.8` y `v0.9` (con permiso del dueño); `ESTADO_PROYECTO.md` desactualizado (al cerrar v0.10).
