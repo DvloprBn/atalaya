@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import * as argon2 from 'argon2';
+import { isCommonPassword } from './common-passwords.js';
 
 // Argon2id con los parámetros mínimos que recomienda OWASP (19 MiB, 2 pasadas).
 // Más memoria = más caro para quien intente adivinar en masa; estos valores
@@ -36,4 +37,18 @@ export async function verifyPassword(hash: string | null | undefined, password: 
 export function passwordContainsEmail(password: string, email: string): boolean {
   const local = email.split('@')[0] ?? '';
   return local.length >= 3 && password.toLowerCase().includes(local.toLowerCase());
+}
+
+export const PASSWORD_CONTAINS_EMAIL = 'La contraseña no puede contener tu correo';
+export const PASSWORD_TOO_COMMON = 'Esa contraseña es de las más comunes y se adivina enseguida. Elige otra (una frase larga funciona bien).';
+
+/**
+ * El motivo por el que una contraseña NUEVA no se acepta, o null si sirve. Un solo sitio para las tres puertas
+ * (registro, restablecer, aceptar invitación), para que ninguna se quede con una regla distinta (S-8).
+ * No depende de si la cuenta existe: no revela nada del correo.
+ */
+export function passwordProblem(password: string, email: string): string | null {
+  if (passwordContainsEmail(password, email)) return PASSWORD_CONTAINS_EMAIL;
+  if (isCommonPassword(password)) return PASSWORD_TOO_COMMON;
+  return null;
 }

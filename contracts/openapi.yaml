@@ -743,7 +743,9 @@ components:
       type: string
       minLength: 12
       maxLength: 128
-      description: No puede contener la parte local del correo.
+      description: |
+        No puede contener la parte local del correo ni ser de las contraseñas más comunes (lista local corta de
+        palabras base, variantes con números o «leet», filas del teclado y repeticiones; S-8). Si no sirve, 400 con el motivo.
     OpaqueToken:
       type: string
       pattern: "^[A-Za-z0-9_-]{43}$"

@@ -5,7 +5,7 @@ import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DEFAULT_ROLE_ID } from './constants.js';
 import { alreadyRegistered, verifyEmail } from './emails.js';
-import { hashPassword, passwordContainsEmail } from './passwords.js';
+import { hashPassword, passwordProblem } from './passwords.js';
 import { RateLimits } from './rate-limits.js';
 import { newOpaqueToken, sha256 } from './tokens.js';
 
@@ -28,9 +28,8 @@ export class RegistrationService {
 
   /** Siempre termina igual hacia fuera; lo que pasó se le cuenta al dueño del correo, por correo. */
   async register(email: string, password: string): Promise<void> {
-    if (passwordContainsEmail(password, email)) {
-      throw new BadRequestException('La contraseña no puede contener tu correo');
-    }
+    const problem = passwordProblem(password, email);
+    if (problem) throw new BadRequestException(problem);
     // El hash se calcula SIEMPRE, exista o no la cuenta: mismo trabajo, mismo tiempo.
     const passwordHash = await hashPassword(password);
     if (!(await this.limits.allowMailTo(email, 'register'))) return; // tope por destinatario, en silencio

@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { loadEnv } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { invitation } from './emails.js';
-import { hashPassword, passwordContainsEmail } from './passwords.js';
+import { hashPassword, passwordProblem } from './passwords.js';
 import { newOpaqueToken, sha256 } from './tokens.js';
 
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
@@ -38,10 +38,11 @@ export class InvitationsService {
   }
 
   /** false = enlace inválido, vencido, ya usado o cuenta desactivada (sin decir cuál). */
-  async accept(token: string, password: string): Promise<boolean | 'password-contains-email'> {
+  async accept(token: string, password: string): Promise<boolean> {
     const row = await this.prisma.emailToken.findUnique({ where: { tokenHash: sha256(token) } });
     if (!row || row.purpose !== 'invite' || !row.userId) return false;
-    if (passwordContainsEmail(password, row.email)) return 'password-contains-email';
+    const problem = passwordProblem(password, row.email);
+    if (problem) throw new BadRequestException(problem);
     const passwordHash = await hashPassword(password);
     const userId = row.userId;
 

@@ -117,7 +117,6 @@ export class AuthController {
   @HttpCode(200)
   async acceptInvite(@Body() dto: ResetPasswordDto) {
     const result = await this.invitations.accept(dto.token, dto.password);
-    if (result === 'password-contains-email') throw new BadRequestException('La contraseña no puede contener tu correo');
     if (!result) throw new BadRequestException(INVALID_LINK);
     return { message: 'Cuenta activada. Ya puedes iniciar sesión.' };
   }

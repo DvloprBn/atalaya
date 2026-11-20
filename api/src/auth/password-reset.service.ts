@@ -3,7 +3,7 @@ import { loadEnv } from '../config/env.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { noAccountForReset, resetPassword } from './emails.js';
-import { hashPassword, passwordContainsEmail } from './passwords.js';
+import { hashPassword, passwordProblem } from './passwords.js';
 import { RateLimits } from './rate-limits.js';
 import { SessionsService } from './sessions.service.js';
 import { newOpaqueToken, sha256 } from './tokens.js';
@@ -49,9 +49,8 @@ export class PasswordResetService {
   async reset(token: string, newPassword: string): Promise<boolean> {
     const row = await this.prisma.emailToken.findUnique({ where: { tokenHash: sha256(token) } });
     if (!row || row.purpose !== 'password_reset' || !row.userId) return false;
-    if (passwordContainsEmail(newPassword, row.email)) {
-      throw new BadRequestException('La contraseña no puede contener tu correo');
-    }
+    const problem = passwordProblem(newPassword, row.email);
+    if (problem) throw new BadRequestException(problem);
     const passwordHash = await hashPassword(newPassword); // fuera de la transacción: tarda
 
     const userId = row.userId;
