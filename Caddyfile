@@ -25,9 +25,9 @@
 	# Páginas que reciben un token en la URL (enlaces de correo): el token no debe
 	# salir en la cabecera Referer hacia ningún otro sitio (lección: rutas por token).
 	# Dos condiciones que se excluyen: así no importa el orden en que Caddy las aplique.
-	@token_pages path /verificar /restablecer
+	@token_pages path /verificar /restablecer /cancelar-2fa
 	header @token_pages Referrer-Policy "no-referrer"
-	@other_pages not path /verificar /restablecer
+	@other_pages not path /verificar /restablecer /cancelar-2fa
 	header @other_pages Referrer-Policy "strict-origin-when-cross-origin"
 
 	handle /api/* {

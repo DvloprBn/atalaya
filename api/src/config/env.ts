@@ -28,15 +28,22 @@ export interface Env {
   mailFrom: string;
   /** Llave AES-256 (64 hexadecimales) con la que se cifran los secretos TOTP. Vive en el entorno, nunca en la base. */
   totpEncryptionKey: string;
+  /** S-9: llaves ANTERIORES (solo descifran) mientras dura una rotación. Vacío fuera de una rotación. */
+  totpEncryptionKeysOld: string[];
   /** Multiplica los topes por IP de las rutas de acceso. 1 en producción (ver common/http/throttle.ts). */
   throttleScale: number;
   /** Carpeta de los archivos subidos (volumen compartido con el worker, que la monta en solo lectura). */
   uploadDir: string;
   /** Carpeta de los resultados de los análisis (CSV). El worker escribe; la API los entrega y los borra. */
   resultsDir: string;
+  /** S-10: segundos entre que un admin pide quitar un 2FA y que se aplica. 48 h; en producción no se cambia. */
+  twoFactorResetDelayS: number;
   /** null = el login con Google no está configurado (las rutas responden 404). */
   oauth: OAuthConfig | null;
 }
+
+/** S-10: la espera decidida por el dueño (2026-11-20): 48 horas. */
+export const TWO_FACTOR_RESET_DELAY_S = 48 * 60 * 60;
 
 let cached: Env | undefined;
 
@@ -52,9 +59,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     smtpUrl: required(source, 'SMTP_URL'),
     mailFrom: required(source, 'MAIL_FROM'),
     totpEncryptionKey: required(source, 'TOTP_ENCRYPTION_KEY'),
+    // Separadas por comas: «la de hace un mes,la de hace dos». Espacios y comas sobrantes se ignoran.
+    totpEncryptionKeysOld: (source.TOTP_ENCRYPTION_KEYS_OLD ?? '').split(',').map((k) => k.trim()).filter(Boolean),
     throttleScale: Number(source.THROTTLE_SCALE ?? 1),
     uploadDir: source.UPLOAD_DIR ?? '/data/uploads',
     resultsDir: source.RESULTS_DIR ?? '/data/results',
+    // SOLO desarrollo y CI lo bajan (segundos), para probar la aplicación sin esperar dos días. Ver la validación abajo.
+    twoFactorResetDelayS: Number(source.TWO_FACTOR_RESET_DELAY_S ?? TWO_FACTOR_RESET_DELAY_S),
     oauth: loadOAuth(source),
   };
   if (!Number.isInteger(env.port) || env.port <= 0) {
@@ -66,6 +77,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (!/^[0-9a-f]{64}$/i.test(env.totpEncryptionKey)) {
     throw new Error('TOTP_ENCRYPTION_KEY debe ser de 64 caracteres hexadecimales (openssl rand -hex 32)');
   }
+  if (env.totpEncryptionKeysOld.some((k) => !/^[0-9a-f]{64}$/i.test(k))) {
+    // No se dice cuál: el mensaje no debe mostrar llaves, ni siquiera una mal escrita.
+    throw new Error('TOTP_ENCRYPTION_KEYS_OLD: cada llave debe ser de 64 hexadecimales, separadas por comas');
+  }
   if (!Number.isInteger(env.throttleScale) || env.throttleScale < 1 || env.throttleScale > 20) {
     throw new Error('THROTTLE_SCALE debe ser un entero de 1 a 20');
   }
@@ -73,6 +88,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error('En producción THROTTLE_SCALE debe ser 1: los topes por IP no se aflojan');
   }
   if (source.NODE_ENV === 'production') rejectExampleValues(source);
+  if (!Number.isInteger(env.twoFactorResetDelayS) || env.twoFactorResetDelayS < 1 || env.twoFactorResetDelayS > TWO_FACTOR_RESET_DELAY_S) {
+    throw new Error('TWO_FACTOR_RESET_DELAY_S debe ser un entero de 1 a 172800 (48 h)');
+  }
+  // La espera ES la defensa contra quien engañe a un admin (S-10): en producción no se acorta, igual que THROTTLE_SCALE.
+  if (source.NODE_ENV === 'production' && env.twoFactorResetDelayS !== TWO_FACTOR_RESET_DELAY_S) {
+    throw new Error('En producción TWO_FACTOR_RESET_DELAY_S debe ser 172800 (48 h): la espera no se acorta');
+  }
   if (!env.uploadDir.startsWith('/')) throw new Error('UPLOAD_DIR debe ser una ruta absoluta');
   if (!env.resultsDir.startsWith('/')) throw new Error('RESULTS_DIR debe ser una ruta absoluta');
   // Solo el origen (esquema + host + puerto), sin ruta ni barra final: se compara tal cual contra Origin.
@@ -89,7 +111,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
  * llave pública: cualquiera que lea el repo podría firmar sesiones. Se revisan también las URLs,
  * que llevan las contraseñas de base y de Redis incrustadas. El mensaje nombra la variable, no el valor.
  */
-const SECRET_VARS = ['JWT_SECRET', 'TOTP_ENCRYPTION_KEY', 'OAUTH_CLIENT_SECRET', 'DATABASE_URL', 'REDIS_URL', 'SMTP_URL'];
+const SECRET_VARS = ['JWT_SECRET', 'TOTP_ENCRYPTION_KEY', 'TOTP_ENCRYPTION_KEYS_OLD', 'OAUTH_CLIENT_SECRET', 'DATABASE_URL', 'REDIS_URL', 'SMTP_URL'];
 function rejectExampleValues(source: NodeJS.ProcessEnv): void {
   for (const name of SECRET_VARS) {
     if (/cambia-esto|changeme|change-me/i.test(source[name] ?? '')) {

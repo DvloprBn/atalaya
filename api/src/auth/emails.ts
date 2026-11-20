@@ -95,3 +95,62 @@ export function sessionsClosed(forgotUrl: string): EmailContent {
     action: { label: 'Cambiar mi contraseña', url: forgotUrl },
   };
 }
+
+// --- S-10 · recuperación asistida del 2FA ---
+
+/** La hora en que se aplica, en la hora del centro de México (la de los negocios de este demo), sin ambigüedad. */
+export function whenMx(date: Date): string {
+  return `${date.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'long', timeStyle: 'short' })} (hora del centro de México)`;
+}
+
+/** A la persona: un admin pidió quitar su 2FA. El correo ES la defensa: si no lo pidió, lo cancela. */
+export function twoFactorResetRequested(cancelUrl: string, effectiveAt: Date, reason: string): EmailContent {
+  return {
+    subject: 'Se pidió quitar la verificación en dos pasos de tu cuenta de Atalaya',
+    title: 'Se pidió quitar tu verificación en dos pasos',
+    paragraphs: [
+      'Un administrador pidió quitar la verificación en dos pasos (2FA) de tu cuenta, porque se reportó que perdiste tu teléfono y tus códigos de recuperación.',
+      `Se aplicará el ${whenMx(effectiveAt)}. Ese momento se cerrarán todas tus sesiones y podrás entrar solo con tu contraseña; después, vuelve a activar el 2FA.`,
+      `Motivo que anotó el administrador: «${reason}».`,
+      'Si NO lo pediste tú, alguien intenta entrar a tu cuenta haciéndose pasar por ti: cancélalo con el botón. Cancelarlo no cambia nada más de tu cuenta.',
+      STUDY,
+    ],
+    action: { label: 'No lo pedí: cancelar', url: cancelUrl },
+  };
+}
+
+/** A la persona: la solicitud se canceló (por ella con el enlace, o por un admin). */
+export function twoFactorResetCancelled(): EmailContent {
+  return {
+    subject: 'Se canceló la solicitud de quitar tu verificación en dos pasos',
+    title: 'Solicitud cancelada',
+    paragraphs: ['La solicitud de quitar la verificación en dos pasos de tu cuenta se canceló. Tu 2FA sigue activo, sin cambios.', STUDY],
+  };
+}
+
+/** Al admin que la pidió: la persona la canceló con su enlace. Es la señal de que alguien quiso suplantarla. */
+export function twoFactorResetRejectedByOwner(targetEmail: string): EmailContent {
+  return {
+    subject: 'La persona canceló el restablecimiento de 2FA que pediste',
+    title: 'Restablecimiento cancelado por su dueño',
+    paragraphs: [
+      `La persona de la cuenta ${targetEmail} canceló, con el enlace de su correo, el restablecimiento de su 2FA que tú pediste.`,
+      'Lo más probable es que quien te contactó NO era ella. Revisa cómo verificaste su identidad y no repitas la solicitud sin hablar antes con la persona por un medio que ya conocías.',
+    ],
+  };
+}
+
+/** A la persona: se aplicó; ya no tiene 2FA y todas sus sesiones se cerraron. */
+export function twoFactorResetApplied(loginUrl: string): EmailContent {
+  return {
+    subject: 'Se quitó la verificación en dos pasos de tu cuenta de Atalaya',
+    title: 'Se quitó tu verificación en dos pasos',
+    paragraphs: [
+      'Pasaron las 48 horas sin que se cancelara: se quitó la verificación en dos pasos de tu cuenta y se cerraron todas tus sesiones.',
+      'Entra con tu contraseña y vuelve a activar el 2FA desde «Mi cuenta». Guarda los códigos de recuperación en un lugar distinto a tu teléfono.',
+      'Si no lo pediste, cambia tu contraseña con «¿Olvidaste tu contraseña?» y avisa a un administrador.',
+      STUDY,
+    ],
+    action: { label: 'Entrar', url: loginUrl },
+  };
+}

@@ -372,6 +372,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/two-factor-reset/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * S-10: la persona cancela, con el enlace de su correo, el restablecimiento de su 2FA que no pidió
+         * @description Misma respuesta si el enlace es inválido, ya se usó, ya se aplicó o ya estaba cancelado: no se dice cuál.
+         *     Es un POST a propósito (botón en la página, no basta abrir el enlace): un escáner de correo que sigue enlaces
+         *     no puede cancelarlo solo. Tope: 5 por IP cada 15 min.
+         */
+        post: operations["cancelTwoFactorReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/roles": {
         parameters: {
             query?: never;
@@ -484,6 +506,33 @@ export interface paths {
         /** Reactiva la cuenta (sus sesiones viejas no reviven) */
         post: operations["adminEnableUser"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/two-factor-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * S-10: pide quitar el 2FA de una cuenta que perdió el teléfono Y los códigos de recuperación
+         * @description NO se aplica al instante: se aplica a las 48 h (`effectiveAt`), y a la persona le llega un correo con un enlace
+         *     para cancelarlo si no lo pidió. La espera es la defensa contra quien engañe a un admin haciéndose pasar por ella.
+         *     Exige al admin su contraseña y un código de SU propio 2FA (si no tiene 2FA activo: 403). Nunca sobre sí mismo
+         *     ni sobre alguien de su nivel o mayor (404, como el resto de /admin). 409 si la cuenta no tiene 2FA o ya hay una
+         *     solicitud pendiente. La verificación de identidad se hace por fuera del sistema: ver docs/laboratorio/v1.0-recuperacion-2fa.md.
+         */
+        post: operations["adminRequestTwoFactorReset"];
+        /** S-10: cancela una solicitud pendiente (cualquier admin que pueda gestionar la cuenta) */
+        delete: operations["adminCancelTwoFactorReset"];
         options?: never;
         head?: never;
         patch?: never;
@@ -755,7 +804,10 @@ export interface components {
          * @description Se normaliza a minúsculas y sin espacios.
          */
         Email: string;
-        /** @description No puede contener la parte local del correo. */
+        /**
+         * @description No puede contener la parte local del correo ni ser de las contraseñas más comunes (lista local corta de
+         *     palabras base, variantes con números o «leet», filas del teclado y repeticiones; S-8). Si no sirve, 400 con el motivo.
+         */
         NewPassword: string;
         OpaqueToken: string;
         RegisterRequest: {
@@ -809,6 +861,13 @@ export interface components {
             password: string;
             code: components["schemas"]["TwoFactorCode"];
         };
+        TwoFactorResetRequest: {
+            /** @description Cómo se verificó la identidad (queda guardado y se le muestra a la persona en el correo). */
+            reason: string;
+            /** @description La contraseña del ADMIN */
+            password: string;
+            code: components["schemas"]["TwoFactorCode"];
+        };
         TwoFactorVerifyRequest: {
             challenge: components["schemas"]["OpaqueToken"];
             code: components["schemas"]["TwoFactorCode"];
@@ -852,6 +911,13 @@ export interface components {
             status: "active" | "invited" | "disabled";
             /** Format: date-time */
             createdAt: string;
+            /**
+             * @description S-10: `reset_pending` = hay una solicitud de quitarlo que se aplica en `twoFactorResetAt`.
+             * @enum {string}
+             */
+            twoFactor: "off" | "on" | "reset_pending";
+            /** Format: date-time */
+            twoFactorResetAt: string | null;
         };
         AdminUserPage: {
             items: components["schemas"]["AdminUser"][];
@@ -895,6 +961,7 @@ export interface components {
         AuditEntry: {
             /** Format: uuid */
             id: string;
+            /** @description `totp_key_rotated` (S-9) la escribe el sistema al re-cifrar los secretos del 2FA: actor y target van en null. */
             action: string;
             /** Format: date-time */
             createdAt: string;
@@ -1732,6 +1799,20 @@ export interface operations {
             400: components["responses"]["Error"];
         };
     };
+    cancelTwoFactorReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Token"];
+        responses: {
+            200: components["responses"]["Message"];
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
     adminRoles: {
         parameters: {
             query?: never;
@@ -1853,6 +1934,44 @@ export interface operations {
         };
     };
     adminEnableUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminUser"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    adminRequestTwoFactorReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorResetRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["AdminUser"];
+            400: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    adminCancelTwoFactorReset: {
         parameters: {
             query?: never;
             header?: never;

@@ -11,6 +11,7 @@ import { InvitationsService } from './invitations.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionsService } from './sessions.service.js';
+import { TwoFactorResets } from './two-factor/two-factor-resets.js';
 
 // El controlador solo traduce HTTP ↔ servicios: lee el cuerpo y las cookies,
 // llama al servicio y arma la respuesta. Ninguna regla de negocio vive aquí.
@@ -28,6 +29,7 @@ export class AuthController {
     private readonly passwordReset: PasswordResetService,
     private readonly sessions: SessionsService,
     private readonly invitations: InvitationsService,
+    private readonly resets: TwoFactorResets,
   ) {}
 
   @Public()
@@ -109,6 +111,16 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     if (!(await this.passwordReset.reset(dto.token, dto.password))) throw new BadRequestException(INVALID_LINK);
     return { message: 'Contraseña actualizada. Se cerraron todas tus sesiones; vuelve a entrar.' };
+  }
+
+  /** S-10: la persona cancela con el enlace de su correo. Misma respuesta pase lo que pase (no se dice si el enlace servía). */
+  @Public()
+  @Throttle({ default: { limit: scaled(5), ttl: 15 * MIN } })
+  @Post('two-factor-reset/cancel')
+  @HttpCode(200)
+  async cancelTwoFactorReset(@Body() dto: TokenDto) {
+    await this.resets.cancelByToken(dto.token);
+    return { message: 'Si había una solicitud pendiente para tu cuenta, quedó cancelada. Tu 2FA sigue activo.' };
   }
 
   @Public()

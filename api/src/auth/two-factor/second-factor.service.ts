@@ -8,6 +8,7 @@ import { SessionsService } from '../sessions.service.js';
 import { Challenges } from './challenges.js';
 import { hashRecoveryCode, normalizeRecoveryCode } from './recovery-codes.js';
 import { SecretBox } from './secret-box.js';
+import { TwoFactorResets } from './two-factor-resets.js';
 import { verifyTotp } from './totp.js';
 
 /**
@@ -25,6 +26,7 @@ export class SecondFactorService {
     private readonly challenges: Challenges,
     private readonly sessions: SessionsService,
     private readonly security: SecurityLog,
+    private readonly resets: TwoFactorResets,
   ) {}
 
   /** ¿Esta cuenta tiene el 2FA CONFIRMADO? (Uno pendiente de confirmar no cuenta.) */
@@ -51,6 +53,7 @@ export class SecondFactorService {
     // con el mismo reto, solo una lo gana (GETDEL atómico) y la otra recibe 401.
     if (!(await this.challenges.consume(challenge))) return null;
     await this.limits.clearTwoFactorFailures(userId);
+    await this.resets.ownerProvedFactor(userId); // S-10: si había una solicitud de quitarle el 2FA, se cae sola
 
     const user = await this.prisma.user.findFirst({
       where: { id: userId, disabledAt: null },

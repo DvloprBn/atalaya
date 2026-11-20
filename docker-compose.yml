@@ -47,10 +47,15 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
+      TOTP_ENCRYPTION_KEYS_OLD: ${TOTP_ENCRYPTION_KEYS_OLD:-}   # S-9: solo durante una rotación (ver .env.example)
       # SOLO desarrollo y CI: las suites de pruebas salen de una misma IP. En producción NO se pone (vale 1).
       # v0.12: la e2e hace 107 subidas y en el CI (más rápido) más de 100 cabían en un minuto: con 15, el tope de subidas
       # (10 × 15 = 150 por minuto) supera a TODAS las de la suite, y ya no depende de la velocidad de la máquina.
       THROTTLE_SCALE: "15"
+      # SOLO desarrollo y CI (S-10): el restablecimiento del 2FA se aplica a los 30 s en vez de a las 48 h, para probar
+      # la aplicación sin esperar dos días (30 y no menos: da margen al despachador de correo, que manda cada 5 s).
+      # En producción la API exige 48 h y no arranca con otro valor.
+      TWO_FACTOR_RESET_DELAY_S: "30"
       # Login con Google. Por defecto apunta al servidor OAuth FALSO de abajo. Para usar Google de
       # verdad, pon los seis OAUTH_* en tu .env (ver .env.example); sin ellos, el valor de aquí manda.
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-atalaya-mock-client}

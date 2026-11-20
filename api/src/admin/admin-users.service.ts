@@ -2,6 +2,8 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import type { AuthUser } from '../auth/current-user.decorator.js';
 import { InvitationsService } from '../auth/invitations.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
+import { TwoFactorResets } from '../auth/two-factor/two-factor-resets.js';
+import { TwoFactorService } from '../auth/two-factor/two-factor.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { writeAudit } from '../security/audit.js';
@@ -17,6 +19,9 @@ export interface AdminUser {
   role: { name: string; level: number };
   status: 'active' | 'invited' | 'disabled';
   createdAt: Date;
+  /** S-10: el admin necesita saber si tiene 2FA, y si ya hay una solicitud de quitarlo (y cuándo se aplica). */
+  twoFactor: 'off' | 'on' | 'reset_pending';
+  twoFactorResetAt: Date | null;
 }
 
 const SELECT = {
@@ -26,6 +31,8 @@ const SELECT = {
   disabledAt: true,
   createdAt: true,
   role: { select: { name: true, level: true } },
+  twoFactor: { select: { confirmedAt: true } },
+  twoFactorResets: { where: { cancelledAt: null, appliedAt: null }, select: { effectiveAt: true }, take: 1 },
 } as const;
 
 // REGLAS (ver hierarchy.ts): solo se ve y se toca lo que está estrictamente por debajo.
@@ -36,6 +43,8 @@ export class AdminUsersService {
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
     private readonly sessions: SessionsService,
+    private readonly twoFactor: TwoFactorService,
+    private readonly resets: TwoFactorResets,
   ) {}
 
   roles(actor: AuthUser) {
@@ -108,6 +117,34 @@ export class AdminUsersService {
     return this.get(actor, id);
   }
 
+  /**
+   * S-10: pedir que se quite el 2FA de alguien que perdió el teléfono y los códigos. Se aplica a las 48 h.
+   * Primero el admin demuestra que es él (contraseña + código de SU 2FA, fuera de la transacción: Argon2 tarda);
+   * luego, con la fila de la cuenta bloqueada, la jerarquía (404 si no la gestiona, también sobre sí mismo).
+   */
+  async requestTwoFactorReset(actor: AuthUser, id: string, reason: string, password: string, code: string): Promise<AdminUser> {
+    await this.twoFactor.confirmIdentity(actor.id, password, code);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockTarget(tx, actor, id);
+      const target = await tx.user.findUniqueOrThrow({ where: { id }, select: { id: true, email: true, twoFactor: { select: { confirmedAt: true } } } });
+      if (!target.twoFactor?.confirmedAt) throw new ConflictException('Esa cuenta no tiene el 2FA activo: no hay nada que quitar');
+      // Con la fila bloqueada, dos admins a la vez se ponen en fila; el índice único parcial de la base es la red.
+      if (await this.resets.findPending(tx, id)) throw new ConflictException('Ya hay una solicitud pendiente para esa cuenta');
+      await this.resets.create(tx, target, actor.id, reason.trim());
+    });
+    return this.get(actor, id);
+  }
+
+  /** S-10: cancelar la solicitud pendiente (cualquier admin que pueda gestionar la cuenta). */
+  async cancelTwoFactorReset(actor: AuthUser, id: string): Promise<AdminUser> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockTarget(tx, actor, id);
+      const { email } = await tx.user.findUniqueOrThrow({ where: { id }, select: { email: true } });
+      if (!(await this.resets.cancelByAdmin(tx, id, actor.id, email))) throw new ConflictException('No hay ninguna solicitud pendiente');
+    });
+    return this.get(actor, id);
+  }
+
   /** El rol existe y está por debajo de quien lo asigna. Si no: 403. */
   private async assignableRole(actor: AuthUser, roleName: string) {
     const role = await this.prisma.role.findUnique({ where: { name: roleName } });
@@ -142,7 +179,20 @@ export class AdminUsersService {
   }
 }
 
-function toAdminUser(u: { id: string; email: string; passwordHash: string | null; disabledAt: Date | null; createdAt: Date; role: { name: string; level: number } }): AdminUser {
+type UserRow = {
+  id: string;
+  email: string;
+  passwordHash: string | null;
+  disabledAt: Date | null;
+  createdAt: Date;
+  role: { name: string; level: number };
+  twoFactor: { confirmedAt: Date | null } | null;
+  twoFactorResets: { effectiveAt: Date }[];
+};
+
+function toAdminUser(u: UserRow): AdminUser {
   const status = u.disabledAt ? 'disabled' : u.passwordHash ? 'active' : 'invited';
-  return { id: u.id, email: u.email, role: u.role, status, createdAt: u.createdAt };
+  const pendingReset = u.twoFactorResets[0]?.effectiveAt ?? null;
+  const twoFactor = pendingReset ? 'reset_pending' : u.twoFactor?.confirmedAt ? 'on' : 'off';
+  return { id: u.id, email: u.email, role: u.role, status, createdAt: u.createdAt, twoFactor, twoFactorResetAt: pendingReset };
 }

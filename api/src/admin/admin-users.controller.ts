@@ -1,9 +1,9 @@
-import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { type AuthUser, CurrentUser } from '../auth/current-user.decorator.js';
 import { LEVEL, MinLevel } from '../common/auth/min-level.decorator.js';
 import { AdminUsersService } from './admin-users.service.js';
-import { ChangeRoleDto, CreateUserDto, ListUsersQuery } from './dto.js';
+import { ChangeRoleDto, CreateUserDto, ListUsersQuery, TwoFactorResetDto } from './dto.js';
 
 // Todo el controlador exige nivel admin (3) o más: un usuario, staff o manager
 // recibe 403 aunque tenga sesión (OWASP API5). Qué cuentas ve y toca cada nivel
@@ -50,6 +50,19 @@ export class AdminUsersController {
   @HttpCode(200)
   enable(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.users.setDisabled(actor, id, false);
+  }
+
+  // S-10 · recuperación asistida del 2FA. 202: aceptada, pero se aplica a las 48 h (no ahora).
+  @Post('users/:id/two-factor-reset')
+  @HttpCode(202)
+  requestTwoFactorReset(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: TwoFactorResetDto) {
+    return this.users.requestTwoFactorReset(actor, id, dto.reason, dto.password, dto.code);
+  }
+
+  @Delete('users/:id/two-factor-reset')
+  @HttpCode(200)
+  cancelTwoFactorReset(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.users.cancelTwoFactorReset(actor, id);
   }
 }
 

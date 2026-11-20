@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { components } from '@/lib/api-schema';
 import { api } from '@/lib/browser-api';
+import { TwoFactorCell } from './two-factor-cell';
 
 type AdminUser = components['schemas']['AdminUser'];
 type AssignableRole = components['schemas']['AssignableRole'];
@@ -38,6 +39,9 @@ export function UserRow({ user, roles, onChanged }: { user: AdminUser; roles: As
         <span className="chip" data-state={user.status === 'active' ? 'ok' : user.status === 'disabled' ? 'down' : undefined}>
           {{ active: 'activa', invited: 'invitada', disabled: 'desactivada' }[user.status]}
         </span>
+      </td>
+      <td>
+        <TwoFactorCell user={user} onChanged={onChanged} />
       </td>
       <td>
         {user.status === 'disabled' ? (

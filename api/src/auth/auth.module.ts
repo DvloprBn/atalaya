@@ -16,7 +16,9 @@ import { OAuthService } from './oauth/oauth.service.js';
 import { OAuthStates } from './oauth/state-store.js';
 import { Challenges } from './two-factor/challenges.js';
 import { SecondFactorService } from './two-factor/second-factor.service.js';
+import { KeyRingCheck } from './two-factor/key-ring-check.js';
 import { SecretBox } from './two-factor/secret-box.js';
+import { TwoFactorResets } from './two-factor/two-factor-resets.js';
 import { TwoFactorController } from './two-factor/two-factor.controller.js';
 import { TwoFactorService } from './two-factor/two-factor.service.js';
 
@@ -36,11 +38,20 @@ const JWT = { issuer: 'atalaya-api', audience: 'atalaya-web' };
   providers: [
     AuthService, RegistrationService, PasswordResetService, InvitationsService, SessionsService, RateLimits, AuthGuard,
     // Segundo factor. La llave de cifrado sale del entorno (nunca de la base) y se valida al arrancar.
-    { provide: SecretBox, useFactory: () => new SecretBox(Buffer.from(loadEnv().totpEncryptionKey, 'hex')) },
+    {
+      provide: SecretBox,
+      // S-9: la llave actual cifra; las anteriores (si hay una rotación en curso) solo descifran.
+      useFactory: () => {
+        const env = loadEnv();
+        return new SecretBox(Buffer.from(env.totpEncryptionKey, 'hex'), env.totpEncryptionKeysOld.map((k) => Buffer.from(k, 'hex')));
+      },
+    },
     Challenges, SecondFactorService, TwoFactorService,
+    TwoFactorResets, // S-10: recuperación asistida (crear, cancelar, aplicar a las 48 h)
+    KeyRingCheck, // S-9: al arrancar avisa si el llavero no abre lo que hay en la base
     // Login con Google (OpenID Connect).
     OAuthService, OAuthStates, JwksCache, OAuthAccounts,
   ],
-  exports: [AuthGuard, JwtModule, InvitationsService, SessionsService],
+  exports: [AuthGuard, JwtModule, InvitationsService, SessionsService, TwoFactorService, TwoFactorResets],
 })
 export class AuthModule {}

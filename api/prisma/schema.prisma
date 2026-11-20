@@ -49,6 +49,8 @@ model User {
   auditAsTarget   AuditLog[]      @relation("AuditTarget")
   uploads         Upload[]
   analyses        Analysis[]
+  twoFactorResets          TwoFactorReset[] @relation("TwoFactorResetTarget")
+  twoFactorResetsRequested TwoFactorReset[] @relation("TwoFactorResetActor")
 
   @@map("users")
 }
@@ -163,6 +165,30 @@ model TwoFactor {
   @@map("two_factors")
 }
 
+/// S-10 · Una solicitud de un admin para QUITAR el 2FA de alguien que perdió el teléfono y los códigos.
+/// No se aplica al instante: a las 48 h (`effectiveAt`), salvo que la persona la cancele con el enlace de su correo.
+/// En la base (migración, SQL a mano): a lo más UNA pendiente por cuenta (índice único parcial) y nunca cancelada
+/// y aplicada a la vez (CHECK).
+model TwoFactorReset {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  user            User      @relation("TwoFactorResetTarget", fields: [userId], references: [id], onDelete: Cascade)
+  /// El admin que la pidió. Si su cuenta se borra, queda la solicitud (y la auditoría) sin él.
+  requestedById   String?   @map("requested_by_id") @db.Uuid
+  requestedBy     User?     @relation("TwoFactorResetActor", fields: [requestedById], references: [id], onDelete: SetNull)
+  /// Cómo se verificó la identidad, en palabras del admin. Se le muestra a la persona en el correo.
+  reason          String    @db.VarChar(200)
+  /// SHA-256 del enlace de cancelación del correo: la base nunca guarda el enlace en sí.
+  cancelTokenHash String    @unique @map("cancel_token_hash") @db.Char(64)
+  effectiveAt     DateTime  @map("effective_at") @db.Timestamptz(3)
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  appliedAt       DateTime? @map("applied_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([effectiveAt])
+  @@map("two_factor_resets")
+}
+
 /// Códigos de un solo uso para entrar si se pierde el teléfono. Se guarda solo su SHA-256.
 model RecoveryCode {
   id        String    @id @default(uuid(7)) @db.Uuid
@@ -218,7 +244,7 @@ model SecurityEvent {
 /// seguridad: aquí los hechos son legítimos, y lo que importa es poder reconstruirlos.
 model AuditLog {
   id        String   @id @default(uuid(7)) @db.Uuid
-  /// user_created | role_changed | user_disabled | user_enabled | two_factor_enabled | two_factor_disabled | recovery_codes_regenerated (CHECK en la base).
+  /// user_created | role_changed | user_disabled | user_enabled | two_factor_enabled | two_factor_disabled | recovery_codes_regenerated | totp_key_rotated | two_factor_reset_requested | two_factor_reset_cancelled | two_factor_reset_applied (CHECK en la base).
   action    String   @db.VarChar(32)
   actorId   String?  @map("actor_id") @db.Uuid
   actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)

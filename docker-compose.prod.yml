@@ -63,7 +63,7 @@ services:
       OAUTH_TOKEN_URL: ${OAUTH_TOKEN_URL:-}
       OAUTH_JWKS_URL: ${OAUTH_JWKS_URL:-}
       OAUTH_ISSUER: ${OAUTH_ISSUER:-}
-    secrets: [postgres_password, redis_password, jwt_secret, totp_encryption_key, smtp_url, oauth_client_secret]
+    secrets: [postgres_password, redis_password, jwt_secret, totp_encryption_key, totp_encryption_key_old, smtp_url, oauth_client_secret]
     tmpfs: [/tmp]
     volumes:
       - *arranque
@@ -197,6 +197,7 @@ secrets:
   worker_db_password: { file: ./secrets/worker_db_password }
   jwt_secret: { file: ./secrets/jwt_secret }
   totp_encryption_key: { file: ./secrets/totp_encryption_key }
+  totp_encryption_key_old: { file: ./secrets/totp_encryption_key_old }   # S-9: solo durante una rotación
   smtp_url: { file: ./secrets/smtp_url }
   oauth_client_secret: { file: ./secrets/oauth_client_secret }
 

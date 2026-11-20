@@ -53,6 +53,24 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...complete, NODE_ENV: 'production' }).port).toBe(3000);
   });
 
+  it('S-9: TOTP_ENCRYPTION_KEYS_OLD es opcional, admite varias separadas por comas y rechaza una mal formada sin mostrarla', () => {
+    expect(loadEnv(complete).totpEncryptionKeysOld).toEqual([]);
+    const a = 'cd'.repeat(32), b = 'ef'.repeat(32);
+    expect(loadEnv({ ...complete, TOTP_ENCRYPTION_KEYS_OLD: ` ${a} , ${b},` }).totpEncryptionKeysOld).toEqual([a, b]);
+    const bad = 'zz'.repeat(32);
+    expect(() => loadEnv({ ...complete, TOTP_ENCRYPTION_KEYS_OLD: `${a},${bad}` })).toThrow('TOTP_ENCRYPTION_KEYS_OLD');
+    expect(() => loadEnv({ ...complete, TOTP_ENCRYPTION_KEYS_OLD: `${a},${bad}` })).not.toThrow(bad);
+  });
+
+  it('S-10: la espera del restablecimiento vale 48 h, se puede bajar fuera de producción y en producción no se acorta', () => {
+    expect(loadEnv(complete).twoFactorResetDelayS).toBe(172_800);
+    expect(loadEnv({ ...complete, TWO_FACTOR_RESET_DELAY_S: '5' }).twoFactorResetDelayS).toBe(5);
+    expect(() => loadEnv({ ...complete, TWO_FACTOR_RESET_DELAY_S: '0' })).toThrow('TWO_FACTOR_RESET_DELAY_S');
+    expect(() => loadEnv({ ...complete, TWO_FACTOR_RESET_DELAY_S: '999999' })).toThrow('TWO_FACTOR_RESET_DELAY_S');
+    expect(() => loadEnv({ ...complete, TWO_FACTOR_RESET_DELAY_S: '5', NODE_ENV: 'production' })).toThrow('no se acorta');
+    expect(loadEnv({ ...complete, NODE_ENV: 'production' }).twoFactorResetDelayS).toBe(172_800);
+  });
+
   describe('OAuth (login con Google)', () => {
     const oauth = {
       OAUTH_CLIENT_ID: 'id', OAUTH_CLIENT_SECRET: 's', OAUTH_ISSUER: 'https://accounts.google.com',

@@ -27,6 +27,8 @@ if pw=$(secret worker_redis_password); then
 fi
 if v=$(secret jwt_secret); then export JWT_SECRET="$v"; fi
 if v=$(secret totp_encryption_key); then export TOTP_ENCRYPTION_KEY="$v"; fi
+# S-9: solo durante una rotación (vacío el resto del tiempo).
+if v=$(secret totp_encryption_key_old); then export TOTP_ENCRYPTION_KEYS_OLD="$v"; fi
 if v=$(secret smtp_url); then export SMTP_URL="$v"; fi
 # Opcional: vacío = el login con Google queda apagado.
 if v=$(secret oauth_client_secret); then export OAUTH_CLIENT_SECRET="$v"; fi

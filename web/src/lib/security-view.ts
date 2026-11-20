@@ -22,6 +22,10 @@ export const AUDIT_LABELS: Record<string, string> = {
   two_factor_enabled: '2FA activado',
   two_factor_disabled: '2FA desactivado',
   recovery_codes_regenerated: 'Códigos de recuperación regenerados',
+  totp_key_rotated: 'Llave del 2FA rotada (sistema)',
+  two_factor_reset_requested: 'Restablecimiento de 2FA pedido (48 h)',
+  two_factor_reset_cancelled: 'Restablecimiento de 2FA cancelado',
+  two_factor_reset_applied: '2FA quitado por restablecimiento (sistema)',
 };
 
 export const label = (map: Record<string, string>, key: string) => map[key] ?? key;

@@ -9,6 +9,7 @@ import { SessionsService } from '../sessions.service.js';
 import { hashRecoveryCode, newRecoveryCodes, normalizeRecoveryCode } from './recovery-codes.js';
 import { SecondFactorService } from './second-factor.service.js';
 import { SecretBox } from './secret-box.js';
+import { TwoFactorResets } from './two-factor-resets.js';
 import { newSecret, otpauthUrl, verifyTotp } from './totp.js';
 
 /** Un solo mensaje para contraseña mala, código malo o cuenta bloqueada: no se dice cuál. */
@@ -23,6 +24,7 @@ export class TwoFactorService {
     private readonly limits: RateLimits,
     private readonly second: SecondFactorService,
     private readonly sessions: SessionsService,
+    private readonly resets: TwoFactorResets,
   ) {}
 
   async status(userId: string) {
@@ -80,6 +82,7 @@ export class TwoFactorService {
       await this.sessions.revokeAllForUser(user.id, 'two_factor_changed', tx, user.sessionId);
     });
     await this.limits.clearTwoFactorFailures(user.id);
+    await this.resets.ownerProvedFactor(user.id); // S-10
     return { recoveryCodes: codes };
   }
 
@@ -92,6 +95,17 @@ export class TwoFactorService {
       await writeAudit(tx, 'two_factor_disabled', user.id, user.id);
       await this.sessions.revokeAllForUser(user.id, 'two_factor_changed', tx, user.sessionId);
     });
+  }
+
+  /**
+   * S-10: el ADMIN que pide quitar el 2FA de otra persona demuestra antes que es él: su contraseña y un código de SU
+   * propio 2FA (con el mismo tope por cuenta que el resto). Quien robe la sesión de un admin no puede usar esta puerta.
+   */
+  async confirmIdentity(userId: string, password: string, code: string): Promise<void> {
+    if (!(await this.second.isEnabled(userId))) {
+      throw new ForbiddenException('Para quitar el 2FA de otra persona, activa primero el tuyo');
+    }
+    await this.reauth(userId, password, code);
   }
 
   /** 10 códigos nuevos; los anteriores (usados o no) dejan de servir. */
@@ -121,6 +135,8 @@ export class TwoFactorService {
       throw denied();
     }
     await this.limits.clearTwoFactorFailures(userId);
+    // S-10: con un código bueno la persona demostró tener su factor (desactivar, regenerar códigos…).
+    if (code !== undefined) await this.resets.ownerProvedFactor(userId);
   }
 
   private async replaceRecoveryCodes(tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0], userId: string, codes: string[]) {

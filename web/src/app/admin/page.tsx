@@ -93,6 +93,7 @@ export default function AdminPage() {
               <th scope="col">Correo</th>
               <th scope="col">Rol</th>
               <th scope="col">Estado</th>
+              <th scope="col">2FA</th>
               <th scope="col">Acciones</th>
             </tr>
           </thead>

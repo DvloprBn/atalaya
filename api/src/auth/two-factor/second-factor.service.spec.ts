@@ -6,6 +6,7 @@ import type { SessionsService } from '../sessions.service.js';
 import type { Challenges } from './challenges.js';
 import { hashRecoveryCode } from './recovery-codes.js';
 import { SecondFactorService } from './second-factor.service.js';
+import type { TwoFactorResets } from './two-factor-resets.js';
 import { SecretBox } from './secret-box.js';
 import { base32Decode, hotp, newSecret, stepAt } from './totp.js';
 
@@ -28,9 +29,11 @@ function build(opts: { challengeOwner?: string | null; locked?: boolean; wins?: 
   };
   const sessions = { start: vi.fn().mockResolvedValue(TOKENS) };
   const security = { record: vi.fn().mockResolvedValue(undefined) };
+  const resets = { ownerProvedFactor: vi.fn().mockResolvedValue(undefined) };
   const service = new SecondFactorService(
     prisma as unknown as PrismaService, box, limits as unknown as RateLimits,
     challenges as unknown as Challenges, sessions as unknown as SessionsService, security as unknown as SecurityLog,
+    resets as unknown as TwoFactorResets,
   );
   // Aislamos el reto de la comprobación del código (que se prueba aparte, abajo).
   const checkCode = vi.spyOn(service, 'checkCode').mockResolvedValue(opts.codeOk ?? true);
@@ -94,6 +97,7 @@ describe('SecondFactorService.checkCode', () => {
     };
     const service = new SecondFactorService(
       prisma as unknown as PrismaService, box, {} as RateLimits, {} as Challenges, {} as SessionsService, {} as SecurityLog,
+      {} as TwoFactorResets,
     );
     return { service, prisma, secret };
   }
