@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isExpired } from '../demo/account-expiry.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { SessionCookies } from './cookies.js';
 import { verifyPassword } from './passwords.js';
@@ -12,6 +13,8 @@ export interface PublicUser {
   id: string;
   email: string;
   role: { name: string; level: number };
+  /** v1.0 · Demo: cuándo se borra la cuenta (la pantalla muestra el aviso y la cuenta regresiva). null = permanente. */
+  expiresAt: Date | null;
 }
 
 /** Sesión iniciada, o — si la cuenta tiene 2FA — un reto: la contraseña ya se comprobó, falta el código. */
@@ -44,14 +47,16 @@ export class AuthService {
     // 2. Siempre se verifica una contraseña, exista o no la cuenta (mismo tiempo).
     const user = await this.prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, passwordHash: true, disabledAt: true, role: { select: { name: true, level: true } } },
+      select: { id: true, email: true, passwordHash: true, disabledAt: true, expiresAt: true, role: { select: { name: true, level: true } } },
     });
     const valid = await verifyPassword(user?.passwordHash, password);
 
-    if (!user || !valid || user.disabledAt) {
+    // Una cuenta de la demo vencida (y aún sin barrer) se ve igual que una desactivada.
+    const blocked = user ? (user.disabledAt ? 'disabled' : isExpired(user) ? 'expired' : null) : null;
+    if (!user || !valid || blocked) {
       await this.limits.recordLoginFailure(email);
       // El motivo real queda SOLO en la bitácora del admin; a quien intenta se le dice siempre lo mismo.
-      await this.security.record('login_failed', { userId: user?.id, ip, detail: !user ? 'unknown_account' : user.disabledAt ? 'disabled' : 'bad_password' });
+      await this.security.record('login_failed', { userId: user?.id, ip, detail: !user ? 'unknown_account' : (blocked ?? 'bad_password') });
       return null;
     }
 
@@ -61,6 +66,6 @@ export class AuthService {
       return { challenge: await this.secondFactor.startChallenge(user.id) };
     }
     const tokens = await this.sessions.start(user.id);
-    return { tokens, user: { id: user.id, email: user.email, role: user.role } };
+    return { tokens, user: { id: user.id, email: user.email, role: user.role, expiresAt: user.expiresAt } };
   }
 }

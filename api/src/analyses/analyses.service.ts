@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { AuthUser } from '../auth/current-user.decorator.js';
+import { DemoService } from '../demo/demo.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
@@ -28,6 +29,7 @@ export class AnalysesService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly results: ResultsStorage,
+    private readonly demo: DemoService,
   ) {}
 
   /** Paso 1: empieza el análisis de un archivo mío ya aceptado. El worker prepara la vista previa. */
@@ -37,6 +39,17 @@ export class AnalysesService {
     if (!upload) throw new NotFoundException();
     if (upload.status !== 'accepted') throw new ConflictException('El archivo todavía no pasó la revisión (o fue rechazado)');
 
+    // Cupo de 24 h de la demo (20): borrar un análisis no lo devuelve. Si el análisis no llega a crearse, sí.
+    await this.demo.consume('analyses', user.id);
+    try {
+      return await this.start(user, uploadId, kind);
+    } catch (error) {
+      await this.demo.refund('analyses', user.id);
+      throw error;
+    }
+  }
+
+  private async start(user: AuthUser, uploadId: string, kind: 'sales' | 'expenses') {
     let analysis;
     try {
       analysis = await this.prisma.$transaction(async (tx) => {

@@ -132,3 +132,21 @@
   - **Dos añadidos de Claude sobre lo propuesto, por seguridad** (el dueño puede objetarlos): (1) si la persona **entra con su 2FA** (o lo activa, desactiva o regenera códigos) mientras está pendiente, la solicitud **se cae sola**; (2) si la persona cancela con su enlace, **se avisa al admin que la pidió** (señal de suplantación).
   - **Espera de desarrollo y CI: 30 s** (`TWO_FACTOR_RESET_DELAY_S`); en producción la API exige 48 h.
   - **Proceso humano de verificación de identidad:** propuesta de Claude en `docs/laboratorio/v1.0-recuperacion-2fa.md` §D, **pendiente de revisión del dueño**.
+
+## 2026-11-20 — v1.0, demo: descargas de terceros (dueño, «vamos con tu recomendación»)
+
+- **«Online Retail II» (UCI) NO entra en la demo:** no cabe en sus límites (más de 1 millón de filas y más de 5 MB), son datos de una empresa real (aunque anonimizados) y su licencia CC BY 4.0 obliga a atribuir en un repo público. La demo sale con el café ficticio y los CFDI sintéticos. D-3 sigue abierto y se cierra mejor con un Excel guardado por el dueño en LibreOffice.
+- **ZAP SÍ, encerrado:** imagen oficial `zaproxy/zaproxy` fijada por digest, en una red de Docker **interna** (sin internet), sin `--privileged` y sin montar más que una carpeta vacía para el informe, contra el stack de producción **desechable** (`-p atalaya-prod`, se borra con `down -v`).
+
+## 2026-11-20 — v1.0, demo de 24 h: diseño (de Claude, dentro de §6 del plan; el dueño puede objetar los añadidos)
+
+- **Interruptor `DEMO_MODE`** (apagado en desarrollo; encendido por omisión en `docker-compose.prod.yml`). Fuera de la demo, Atalaya funciona como hasta v0.12. Vida de una cuenta: 24 h fijas en producción (la API no arranca con otra cifra, como la espera de S-10); en desarrollo solo se puede **acortar** (`docker-compose.demo.yml`: 90 s y tope de 3, para probar en minutos).
+- **`users.expires_at`**: lo pone la creación de la cuenta (registro, Google **y las cuentas que crea un admin**, porque §6 pide «credenciales con vigencia»); null = permanente (sembradas). **Cuenta vencida = desactivada** en la guarda, la renovación, el login, el 2FA y Google: el acceso se corta al vencer, no al barrer.
+- **Tope global: 50 cuentas vivas** por omisión (§6 no daba cifra; `DEMO_MAX_ACCOUNTS`). Con candado en la transacción de alta. Demo llena: 503 con mensaje fijo; el enlace de registro **no se gasta**. Google llena: `/login?error=demo_llena`.
+- **Límites:** 10 archivos a la vez, 5 MB y 50 mil filas ya existían desde v0.8. «20 análisis al día» = 20 **empezados** por cuenta en 24 h (contador en Redis; borrar no devuelve el cupo).
+- **Añadido de Claude: 30 subidas por cuenta cada 24 h.** Motivo: el tope de 10 archivos es «a la vez», así que subir-borrar-subir ocupaba al worker sin fin (API4). Mismo mecanismo que el de análisis.
+- **Casilla «sin datos reales»:** campo `noRealData=true` del multipart, exigido por la API en la demo (400 sin él); la pantalla la desmarca tras cada subida.
+- **Barrido** al arrancar y cada 15 min (en desarrollo, cada media vida): bytes del disco primero, fila después (cascada); una cuenta con un archivo en revisión espera a la siguiente vuelta.
+- **Datos de ejemplo** descargables desde «Mis archivos»: `scripts/preparar-ejemplos.sh` los genera (deterministas) en `web/public/ejemplos/` (no se versionan); `web/Dockerfile` no construye sin ellos.
+- **Fuera de alcance de hoy:** las invitaciones de dvlopr-bn para mostrar admin y roles (§6) viven en dvlopr-bn y se hacen al desplegar.
+- **Corrección encontrada en el camino (S-2):** desde que la CSP la pone Next, `/api/*` iba sin CSP y el smoke del CI fallaba; Caddy pone ahora `default-src 'none'; frame-ancestors 'none'` en `/api/*` y el smoke comprueba ambas.

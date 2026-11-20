@@ -9,12 +9,14 @@ import type { SecondFactorService } from './two-factor/second-factor.service.js'
 const PASSWORD = 'una frase larga de prueba';
 const TOKENS = { access: 'a', refresh: 'r', accessMaxAgeMs: 1, refreshMaxAgeMs: 1 };
 
-async function build({ exists = true, disabled = false, locked = false, twoFactor = false } = {}) {
+async function build({ exists = true, disabled = false, expired = false, locked = false, twoFactor = false } = {}) {
   const user = {
     id: 'u1',
     email: 'ana@example.com',
     passwordHash: await hashPassword(PASSWORD),
     disabledAt: disabled ? new Date() : null,
+    // v1.0 · Demo: vencida hace un minuto (el barrido de cada 15 min aún no la borra), o vigente una hora más.
+    expiresAt: expired ? new Date(Date.now() - 60_000) : new Date(Date.now() + 3_600_000),
     role: { name: 'usuario', level: 0 },
   };
   const prisma = { user: { findUnique: vi.fn().mockResolvedValue(exists ? user : null) } };
@@ -40,7 +42,7 @@ describe('AuthService.login', () => {
   it('con la contraseña correcta abre sesión y limpia los fallos', async () => {
     const { service, limits, sessions } = await build();
     const result = await service.login('ana@example.com', PASSWORD);
-    expect(result && 'user' in result ? result.user : null).toEqual({ id: 'u1', email: 'ana@example.com', role: { name: 'usuario', level: 0 } });
+    expect(result && 'user' in result ? result.user : null).toEqual({ id: 'u1', email: 'ana@example.com', role: { name: 'usuario', level: 0 }, expiresAt: expect.any(Date) });
     expect(sessions.start).toHaveBeenCalledWith('u1');
     expect(limits.clearLoginFailures).toHaveBeenCalled();
   });
@@ -59,7 +61,7 @@ describe('AuthService.login', () => {
   });
 
   it('contraseña mala, cuenta inexistente y cuenta desactivada se ven IGUAL (null) y cuentan como fallo', async () => {
-    for (const scenario of [{ password: 'mala' }, { exists: false }, { disabled: true }]) {
+    for (const scenario of [{ password: 'mala' }, { exists: false }, { disabled: true }, { expired: true }]) {
       const { service, limits, sessions } = await build(scenario);
       expect(await service.login('ana@example.com', scenario.password ?? PASSWORD)).toBeNull();
       expect(limits.recordLoginFailure).toHaveBeenCalledWith('ana@example.com');
@@ -68,8 +70,9 @@ describe('AuthService.login', () => {
   });
 
   it('cada fallo deja un renglón en la bitácora con su motivo real (que el visitante nunca ve)', async () => {
-    const motivos: [{ password?: string; exists?: boolean; disabled?: boolean }, string][] = [
+    const motivos: [{ password?: string; exists?: boolean; disabled?: boolean; expired?: boolean }, string][] = [
       [{ password: 'mala' }, 'bad_password'], [{ exists: false }, 'unknown_account'], [{ disabled: true }, 'disabled'],
+      [{ expired: true }, 'expired'],
     ];
     for (const [scenario, detail] of motivos) {
       const { service, security } = await build(scenario);

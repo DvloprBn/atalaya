@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ¿Es esto la demo de 24 h? Y sus límites (v1.0)
+         * @description Público: el registro y la subida lo necesitan antes de tener cuenta. Sin demo, `enabled` es false y `limits` null. Nunca dice cuántas cuentas hay ni cuánto falta para llenar el tope global.
+         */
+        get: operations["getDemo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -36,7 +56,8 @@ export interface paths {
         /**
          * Pide crear una cuenta (manda un enlace de verificación)
          * @description Misma respuesta exista o no la cuenta. La cuenta NO se crea aquí: nace al abrir el enlace.
-         *     Tope: 5 por IP cada 15 min.
+         *     Tope: 5 por IP cada 15 min. En la demo (v1.0), 503 si el tope global de cuentas de prueba está lleno
+         *     (no dice nada de ninguna cuenta).
          */
         post: operations["register"];
         delete?: never;
@@ -54,7 +75,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Abre el enlace de registro y crea la cuenta (un solo uso) */
+        /**
+         * Abre el enlace de registro y crea la cuenta (un solo uso)
+         * @description En la demo (v1.0) la cuenta nace con su fecha de borrado (`expiresAt`, 24 h). Si el tope global de cuentas de prueba está lleno, 503 y el enlace NO se gasta: sirve para reintentar mientras no venza.
+         */
         post: operations["verifyEmail"];
         delete?: never;
         options?: never;
@@ -344,7 +368,8 @@ export interface paths {
          * @description Nunca devuelve JSON ni detalles: siempre redirige. Éxito sin 2FA: `/cuenta` con las cookies de sesión.
          *     Éxito con 2FA: `/login#challenge=…` (el reto va en el fragmento, que no viaja al servidor ni en Referer).
          *     Cualquier fallo (state, cookie, PKCE, firma, emisor, audiencia, nonce, caducidad, correo no verificado,
-         *     cuenta desactivada…): `/login?error=google`, sin decir cuál.
+         *     cuenta desactivada o vencida…): `/login?error=google`, sin decir cuál. Demo llena (v1.0, no es un rechazo):
+         *     `/login?error=demo_llena`.
          */
         get: operations["googleCallback"];
         put?: never;
@@ -630,7 +655,7 @@ export interface paths {
         put?: never;
         /**
          * Sube un archivo (CSV, XLSX, un CFDI en XML, un ZIP de CFDI o un PDF con una tabla) y lo encola para su revisión
-         * @description multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV, XLSX, XML, ZIP ni PDF, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415, igual que un PDF cifrado o con contenido activo visible en sus bytes (JavaScript, acciones de lanzamiento, archivos incrustados, XFA). **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado o con DOCTYPE (XXE), y que un `.xml` o cada entrada de un `.zip` sea de verdad un CFDI 3.3 o 4.0. **No se valida la firma ni el estatus del CFDI ante el SAT**: es analítica, no fiscal. Un PDF se abre en un proceso aparte con tope de tiempo y de memoria, y debe tener texto (no se hace OCR), máximo 50 páginas, ningún contenido activo y al menos una tabla. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
+         * @description multipart/form-data con UN campo `file` y, en la demo (v1.0), la casilla `noRealData=true` («Confirmo que no contiene datos reales de personas»), obligatoria (400 sin ella). En la demo, además, 30 subidas por cuenta cada 24 h (429; borrar un archivo no devuelve el cupo). Revisión en dos tiempos. **En la API, antes de guardar nada:** tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type (415 si no es CSV, XLSX, XML, ZIP ni PDF, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y cualquier otro formato con macros se rechazan con 415, igual que un PDF cifrado o con contenido activo visible en sus bytes (JavaScript, acciones de lanzamiento, archivos incrustados, XFA). **En el worker, ya encolado:** bomba zip (tamaño descomprimido y razón de compresión), demasiadas entradas, rango de hoja gigante, XML mal formado o con DOCTYPE (XXE), y que un `.xml` o cada entrada de un `.zip` sea de verdad un CFDI 3.3 o 4.0. **No se valida la firma ni el estatus del CFDI ante el SAT**: es analítica, no fiscal. Un PDF se abre en un proceso aparte con tope de tiempo y de memoria, y debe tener texto (no se hace OCR), máximo 50 páginas, ningún contenido activo y al menos una tabla. Responde 202: el resultado de la revisión profunda se consulta con `getUpload`.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -697,7 +722,7 @@ export interface paths {
         put?: never;
         /**
          * Empieza el análisis de un archivo mío ya aceptado
-         * @description Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido); el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`. 404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay 10 análisis en la cuenta.
+         * @description Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido); el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`. 404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay 10 análisis en la cuenta. En la demo (v1.0), 20 análisis por cuenta cada 24 h (429; borrar uno no devuelve el cupo).
          */
         post: operations["createAnalysis"];
         delete?: never;
@@ -839,6 +864,26 @@ export interface components {
             /** Format: email */
             email: string;
             role: components["schemas"]["Role"];
+            /**
+             * Format: date-time
+             * @description v1.0 · Demo — cuándo se borra la cuenta con todo lo suyo. null = cuenta permanente.
+             */
+            expiresAt: string | null;
+        };
+        DemoInfo: {
+            enabled: boolean;
+            /** @description Vida de una cuenta de prueba (0 sin demo) */
+            accountHours: number;
+            limits: null | {
+                /** @description Archivos a la vez por cuenta */
+                files: number;
+                /** @description Tamaño máximo de un archivo */
+                megabytes: number;
+                /** @description Filas máximas por archivo */
+                rows: number;
+                uploadsPerDay: number;
+                analysesPerDay: number;
+            };
         };
         LoginSuccess: {
             user: components["schemas"]["PublicUser"];
@@ -961,7 +1006,11 @@ export interface components {
         AuditEntry: {
             /** Format: uuid */
             id: string;
-            /** @description `totp_key_rotated` (S-9) la escribe el sistema al re-cifrar los secretos del 2FA: actor y target van en null. */
+            /**
+             * @description `totp_key_rotated` (S-9) la escribe el sistema al re-cifrar los secretos del 2FA: actor y target van en null.
+             *     S-10: `two_factor_reset_requested` (actor = el admin), `two_factor_reset_cancelled` (detail dice quién),
+             *     `two_factor_reset_applied` (lo aplica el sistema a las 48 h: actor null).
+             */
             action: string;
             /** Format: date-time */
             createdAt: string;
@@ -1003,6 +1052,11 @@ export interface components {
              * @description CSV, XLSX, XML (CFDI), ZIP de CFDI o PDF; máximo 5 MB
              */
             file: string;
+            /**
+             * @description v1.0 · La casilla de la demo («Confirmo que no contiene datos reales de personas»), obligatoria en la demo.
+             * @enum {string}
+             */
+            noRealData?: "true" | "false";
         };
         /**
          * @description queued = en la cola · checking = el worker lo revisa · accepted = pasó la revisión profunda · rejected = no pasó (ver `rejectReason`).
@@ -1436,6 +1490,33 @@ export interface operations {
             };
         };
     };
+    getDemo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La configuración de la demo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoInfo"];
+                };
+            };
+            /** @description Se superó el tope de peticiones */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     register: {
         parameters: {
             query?: never;
@@ -1448,6 +1529,7 @@ export interface operations {
             202: components["responses"]["CheckYourEmail"];
             400: components["responses"]["Error"];
             429: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     verifyEmail: {
@@ -1461,6 +1543,7 @@ export interface operations {
         responses: {
             200: components["responses"]["Message"];
             400: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     login: {
@@ -1772,7 +1855,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirige a `/cuenta`, a `/login#challenge=…` o a `/login?error=google` */
+            /** @description Redirige a `/cuenta`, a `/login#challenge=…`, a `/login?error=google` o a `/login?error=demo_llena` */
             302: {
                 headers: {
                     Location?: string;

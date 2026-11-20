@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { Prisma } from '../generated/prisma/client.js';
 import { MailService } from '../mail/mail.service.js';
 import { loadEnv } from '../config/env.js';
+import { isExpired } from '../demo/account-expiry.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SecurityLog } from '../security/security-log.service.js';
 import { sessionsClosed } from './emails.js';
@@ -47,11 +48,11 @@ export class SessionsService {
   async rotate(refresh: string, ip?: string): Promise<SessionCookies | null> {
     const token = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: sha256(refresh) },
-      include: { session: { include: { user: { select: { disabledAt: true } } } } },
+      include: { session: { include: { user: { select: { disabledAt: true, expiresAt: true } } } } },
     });
     if (!token) return null;
     const { session } = token;
-    if (session.revokedAt || session.expiresAt <= new Date() || session.user.disabledAt) return null;
+    if (session.revokedAt || session.expiresAt <= new Date() || session.user.disabledAt || isExpired(session.user)) return null;
 
     if (token.rotatedAt) {
       await this.handleReuse(token.sessionId, session.userId, token.rotatedAt, ip);

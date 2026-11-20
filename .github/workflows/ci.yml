@@ -86,6 +86,8 @@ jobs:
               -e "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" \
               -e "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
               -e "s/^OAUTH_CLIENT_SECRET=.*/OAUTH_CLIENT_SECRET=$(openssl rand -hex 24)/" .env.example > .env
+      # v1.0 · Los datos de ejemplo que la demo ofrece para descargar (deterministas; no se versionan).
+      - run: ./scripts/preparar-ejemplos.sh
       - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
       - name: Esperar a que todo responda
         run: timeout 180 bash -c 'until curl -fs http://127.0.0.1:3070/api/health; do sleep 3; done'
@@ -105,6 +107,14 @@ jobs:
         working-directory: web
         env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1" }
         run: npm ci --no-fund && npm run test:browser
+      # v1.0 · La demo de 24 h: la misma API con DEMO_MODE (cuentas de 90 s, tope de 3). Al recrearse, la API también
+      # empieza con el tope de peticiones en cero (vive en memoria, S-6).
+      - name: Demo de 24 h (API y Chrome)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.demo.yml up -d api
+          timeout 120 bash -c 'until curl -fs http://127.0.0.1:3070/api/demo | grep -q "\"enabled\":true"; do sleep 3; done'
+          (cd api && npm run test:e2e -- demo)
+          (cd web && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npx playwright test demo)
       # Si algo falla, primero el ESTADO de cada contenedor: ¿sigue vivo?, ¿con qué código salió?, ¿lo mató la falta de
       # memoria?, ¿cuántas veces se reinició? Lo agregó v0.12: el smoke falló con la API muda y en ninguna máquina local
       # se pudo reproducir; sin esto, el registro no dice si la API se cayó, se reinició o se quedó sin memoria.

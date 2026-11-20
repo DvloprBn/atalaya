@@ -4,6 +4,7 @@ import { AppShell } from '@/components/app-shell';
 import { api, type UploadPage } from '@/lib/browser-api';
 import { isPending } from '@/lib/upload-view';
 import { Pager } from '../admin/seguridad/pager';
+import { Samples } from './samples';
 import { UploadForm } from './upload-form';
 import { UploadsTable } from './uploads-table';
 import { SessionProblem, useMe } from '@/lib/use-me';
@@ -47,6 +48,7 @@ export default function FilesPage() {
       <h1>Mis archivos</h1>
       <div className="stack">
         <UploadForm onUploaded={() => (setPage(1), void load())} />
+        <Samples />
         <section className="card stack" aria-labelledby="lista">
           <h2 id="lista">Subidos</h2>
           {data && <UploadsTable items={data.items} onChanged={() => void load()} />}

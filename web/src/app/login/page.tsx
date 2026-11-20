@@ -6,21 +6,27 @@ import { GoogleButton } from '@/components/google-button';
 import { api, type LoginResponse } from '@/lib/browser-api';
 import { useForm } from '@/lib/use-form';
 
+const GOOGLE_FAILED = 'No pudimos iniciar sesión con Google. Inténtalo de nuevo, o entra con tu correo y contraseña.';
+const DEMO_FULL = 'La demo está llena en este momento: las cuentas de prueba se borran a las 24 horas. Vuelve a intentarlo más tarde.';
+
 export default function LoginPage() {
   const router = useRouter();
   // Con 2FA, la contraseña buena no abre sesión: devuelve un reto de un solo uso y la
   // pantalla pasa al segundo paso. El reto vive solo en memoria de esta pestaña.
   const [challenge, setChallenge] = useState<string | null>(null);
-  const [googleError, setGoogleError] = useState(false);
+  const [googleError, setGoogleError] = useState('');
 
   // Al regresar de Google, la URL puede traer dos cosas: `#challenge=…` (la cuenta tiene 2FA y falta el
-  // código: va en el FRAGMENTO porque ese no viaja al servidor ni en `Referer`) o `?error=google`.
+  // código: va en el FRAGMENTO porque ese no viaja al servidor ni en `Referer`), `?error=google` o, en la demo, `?error=demo_llena`.
+  // Los textos son FIJOS: lo que traiga la URL nunca se muestra tal cual.
   // Se leen UNA vez y se borran de la barra de direcciones.
   useEffect(() => {
     const url = new URL(window.location.href);
     const reto = /^#challenge=([A-Za-z0-9_-]{43})$/.exec(url.hash);
     if (reto) setChallenge(reto[1]);
-    if (url.searchParams.get('error') === 'google') setGoogleError(true);
+    const error = url.searchParams.get('error');
+    if (error === 'google') setGoogleError(GOOGLE_FAILED);
+    if (error === 'demo_llena') setGoogleError(DEMO_FULL);
     if (reto || url.searchParams.has('error')) window.history.replaceState(null, '', url.pathname);
   }, []);
 
@@ -80,9 +86,7 @@ export default function LoginPage() {
         <button disabled={first.busy}>Entrar</button>
         {first.result && !first.result.ok && <p role="alert">{first.result.message}</p>}
       </form>
-      {googleError && (
-        <p role="alert">No pudimos iniciar sesión con Google. Inténtalo de nuevo, o entra con tu correo y contraseña.</p>
-      )}
+      {googleError && <p role="alert">{googleError}</p>}
       <GoogleButton />
       <p className="row" style={{ justifyContent: 'space-between', fontSize: 14 }}>
         <a href="/olvide">¿Olvidaste tu contraseña?</a>

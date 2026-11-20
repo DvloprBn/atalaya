@@ -954,3 +954,45 @@ Lección: sembrar fallas a propósito es lo único que dice si una prueba prueba
 ### 6. Lo que NO hace
 
 No lee tablas sin líneas ni escaneos, ni abre PDF con contraseña. `pypdfium2` y `Pillow` llegan como dependencias de pdfplumber pero **no se cargan** (solo sirven para dibujar páginas).
+
+## Capítulo v1.0: producción y una demo abierta a cualquiera
+
+> Lo nuevo: el sistema queda listo para salir a internet. Endurecimiento de producción (secretos en archivos, CSP en bloqueo, llave del 2FA rotable y recuperación asistida del 2FA: ver [`laboratorio/v1.0-rotacion-totp.md`](laboratorio/v1.0-rotacion-totp.md) y [`laboratorio/v1.0-recuperacion-2fa.md`](laboratorio/v1.0-recuperacion-2fa.md)) y la **demo de 24 h**, con ataques y defensas en [`laboratorio/v1.0-demo.md`](laboratorio/v1.0-demo.md). Falta el escaneo ZAP (se agrega aquí al correrlo).
+
+### 1. Preparar y probar la demo
+
+```bash
+docker compose exec api npx prisma migrate deploy                          # demo_accounts: users.expires_at, aditiva
+./scripts/preparar-ejemplos.sh                                             # datos de ejemplo para descargar
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d api  # demo con cuentas de 90 s y tope de 3
+```
+
+Regístrate en `/registro` con cualquier correo `@example.com` (el enlace llega a Mailpit, http://localhost:3071), entra y mira el aviso de arriba: la fecha del borrado y cuánto falta. En **Mis archivos** descarga `cafe-ventas.csv`, súbelo marcando la casilla y analízalo. Espera minuto y medio: la sesión se corta sola y, a lo más 45 s después, la cuenta y sus archivos ya no existen.
+
+### 2. La idea: una fecha en la cuenta, y una sola regla
+
+Cada cuenta nueva nace con `expires_at` (alta + 24 h); las sembradas y las de fuera de la demo lo tienen vacío y son permanentes. De ahí sale todo:
+
+- **Vencida = desactivada.** Los lugares que ya preguntaban «¿está desactivada?» ahora preguntan también «¿ya venció?». No hace falta esperar al barrido para cortar el acceso.
+- **El barrido** (al arrancar y cada 15 min) borra la fila, y la base borra **en cascada** sesiones, 2FA, archivos y análisis. Los bytes del disco no los conoce la base: se borran antes que la fila.
+- **El tope global** cuenta las cuentas con `expires_at` en el futuro, con un candado para que dos altas a la vez no se cuelen.
+
+### 3. El ataque de la fase: abuso de recursos (OWASP API4)
+
+Un sitio que acepta cuentas y archivos de cualquiera se puede tumbar sin romper nada: basta con **usarlo mucho**. Las defensas van por capas, y cada una cubre lo que la anterior no:
+
+```
+por IP y por minuto (v0.1) → por destinatario de correo (v0.2) → por cuenta: 10 archivos a la vez (v0.8)
+  → por cuenta y por día: 30 subidas y 20 análisis (v1.0) → global: 50 cuentas vivas (v1.0)
+```
+
+El cupo diario es un `INCR` en Redis con vigencia de 24 h puesta **una sola vez** (`EXPIRE … NX`): atómico, y el contador nunca es eterno. Borrar un archivo **no** devuelve el cupo (si lo devolviera, «subir y borrar» seguiría sin fin); solo se devuelve si la subida misma no llegó a ocurrir.
+
+### 4. Lo que las pruebas encontraron
+
+- **El smoke del CI estaba roto desde S-2:** la CSP se mudó de Caddy a Next (para llevar nonce) y las respuestas de `/api/*` se quedaron **sin ninguna CSP**. El smoke seguía buscando la cabecera vieja. Ahora la API lleva la suya, la de «nada de nada» (`default-src 'none'; frame-ancestors 'none'`), y el smoke comprueba las dos.
+- **Una falla sembrada:** quitando el filtro de cuenta vencida de la guarda, la e2e «vencida» falla. Sin ese filtro, una sesión abierta habría sobrevivido hasta 15 minutos a su propia cuenta.
+
+### 5. Lo que NO hace
+
+No pide nada más que un correo, así que alguien con 50 correos válidos puede dejar la demo llena un día: es una negación de servicio de la demo, no un riesgo para los datos. Las organizaciones (varias personas sobre los datos de un negocio) quedan fuera, a propósito (§6 del plan).

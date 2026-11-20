@@ -1,4 +1,5 @@
 import { Prisma } from '../../generated/prisma/client.js';
+import type { DemoService } from '../../demo/demo.service.js';
 import type { MailService } from '../../mail/mail.service.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import { OAuthAccounts } from './google-accounts.js';
@@ -25,8 +26,9 @@ function build(opts: { identity?: Found; user?: Found } = {}) {
     $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const mail = { enqueue: vi.fn().mockResolvedValue(undefined) };
-  const accounts = new OAuthAccounts(prisma as unknown as PrismaService, mail as unknown as MailService);
-  return { accounts, prisma, tx, mail };
+  const demo = { reserveSeat: vi.fn().mockResolvedValue(null) }; // sin demo: la cuenta nace permanente
+  const accounts = new OAuthAccounts(prisma as unknown as PrismaService, mail as unknown as MailService, demo as unknown as DemoService);
+  return { accounts, prisma, tx, mail, demo };
 }
 const verifiedUser = (extra = {}) => ({ id: 'u1', disabledAt: null, emailVerifiedAt: new Date(), oauthIdentities: [], ...extra });
 const code = (p: Promise<unknown>) => p.then(() => 'ok', (e: { code?: string }) => e.code);
@@ -42,6 +44,19 @@ describe('OAuthAccounts (a qué cuenta corresponde una cuenta de Google)', () =>
   it('una identidad de una cuenta desactivada no entra', async () => {
     const { accounts } = build({ identity: { user: { id: 'u1', disabledAt: new Date() } } });
     expect(await code(accounts.resolve(CLAIMS))).toBe('account_denied');
+  });
+
+  it('v1.0: una identidad de una cuenta de la demo ya vencida (y aún sin barrer) no entra', async () => {
+    const { accounts } = build({ identity: { user: { id: 'u1', disabledAt: null, expiresAt: new Date(Date.now() - 1000) } } });
+    expect(await code(accounts.resolve(CLAIMS))).toBe('account_denied');
+  });
+
+  it('v1.0: en la demo, la cuenta nueva nace con la fecha de borrado que reserva la demo', async () => {
+    const { accounts, tx, demo } = build();
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    demo.reserveSeat.mockResolvedValueOnce(expiresAt);
+    await accounts.resolve(CLAIMS);
+    expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt }) }));
   });
 
   it('regla 2: un correo con cuenta verificada se VINCULA y se avisa al dueño, en la misma transacción', async () => {

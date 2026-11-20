@@ -23,13 +23,17 @@ check "una ruta de la API que no existe responde 404, no 500" \
 echo "Cabeceras de seguridad (las pone Caddy en todas las respuestas)"
 for path in / /api/health; do
   headers=$(curl -sSI "$BASE$path")
-  for h in 'x-content-type-options: nosniff' 'x-frame-options: DENY' 'referrer-policy:' \
-           'permissions-policy:' 'content-security-policy-report-only:'; do
+  for h in 'x-content-type-options: nosniff' 'x-frame-options: DENY' 'referrer-policy:' 'permissions-policy:'; do
     check "$path lleva '$h'" "grep -qi \"^$h\" <<<\"\$headers\""
   done
   check "$path no anuncia el servidor (Server / X-Powered-By)" \
     "! grep -qiE '^(server|x-powered-by):' <<<\"\$headers\""
 done
+
+# CSP (S-2): las páginas la llevan de Next, con nonce (en desarrollo, en modo reporte); la API, la de «nada de nada», de Caddy.
+check "/ lleva una CSP con nonce" "curl -sSI $BASE/ | grep -qiE \"^content-security-policy(-report-only)?: .*'nonce-\""
+check "/api/health lleva la CSP de la API (default-src 'none')" \
+  "curl -sSI $BASE/api/health | grep -qi \"^content-security-policy: default-src 'none'; frame-ancestors 'none'\""
 
 echo "Aislamiento"
 check "el sitio solo escucha en 127.0.0.1 (no en la red local)" \

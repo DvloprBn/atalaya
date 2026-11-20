@@ -13,6 +13,7 @@ export type TwoFactorStatus = components['schemas']['TwoFactorStatus'];
 export type TwoFactorSetup = components['schemas']['TwoFactorSetup'];
 export type RecoveryCodes = components['schemas']['RecoveryCodes'];
 export type Upload = components['schemas']['Upload'];
+export type DemoInfo = components['schemas']['DemoInfo'];
 export type UploadPage = components['schemas']['UploadPage'];
 export type AdminUploadPage = components['schemas']['AdminUploadPage'];
 export type Analysis = components['schemas']['Analysis'];
@@ -86,7 +87,10 @@ async function toResult<T>(res: Response): Promise<ApiResult<T>> {
 
 function errorMessage(status: number, error?: ApiError): string {
   if (status === 413) return 'El archivo pasa de 5 MB.';
+  // v1.0 · Los cupos de 24 h de la demo también son 429, pero con su propio mensaje (empieza con «En la demo»).
+  if (status === 429 && typeof error?.message === 'string' && error.message.startsWith('En la demo')) return error.message;
   if (status === 429) return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
-  if (status >= 500 || !error) return 'Algo salió mal. Intenta de nuevo.';
+  // Un 503 lo arma siempre la API con un texto propio («La demo está llena…», «No se pudo encolar…»); un 500, no.
+  if ((status >= 500 && status !== 503) || !error) return 'Algo salió mal. Intenta de nuevo.';
   return Array.isArray(error.message) ? error.message.join('. ') : error.message;
 }

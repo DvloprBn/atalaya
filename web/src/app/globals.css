@@ -77,6 +77,9 @@ input[type='file']::file-selector-button {
   background: var(--signal); color: var(--signal-ink); font: inherit; font-weight: 600; cursor: pointer;
 }
 input::placeholder { color: var(--faint); }
+/* v1.0 · Casillas (la de la demo al subir): del tamaño de un dedo, con el texto a la derecha. */
+input[type='checkbox'] { width: 22px; height: 22px; padding: 0; flex: none; accent-color: var(--signal); }
+label.check { flex-direction: row; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 
 button, a.button {
   display: inline-flex;

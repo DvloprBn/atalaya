@@ -5,6 +5,8 @@ export interface AuthUser {
   id: string;
   email: string;
   role: { name: string; level: number };
+  /** v1.0 · Demo: cuándo se borra la cuenta. null = permanente. */
+  expiresAt: Date | null;
   sessionId: string;
 }
 

@@ -4,6 +4,7 @@ import { InvitationsService } from '../auth/invitations.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import { TwoFactorResets } from '../auth/two-factor/two-factor-resets.js';
 import { TwoFactorService } from '../auth/two-factor/two-factor.service.js';
+import { DemoService } from '../demo/demo.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { writeAudit } from '../security/audit.js';
@@ -45,6 +46,7 @@ export class AdminUsersService {
     private readonly sessions: SessionsService,
     private readonly twoFactor: TwoFactorService,
     private readonly resets: TwoFactorResets,
+    private readonly demo: DemoService,
   ) {}
 
   roles(actor: AuthUser) {
@@ -78,7 +80,9 @@ export class AdminUsersService {
       if (await tx.user.findUnique({ where: { email }, select: { id: true } })) {
         throw new ConflictException('Ya existe una cuenta con ese correo');
       }
-      const user = await tx.user.create({ data: { email, roleId: role.id }, select: { id: true, email: true } });
+      // Demo: también las cuentas que crea un admin se borran a las 24 h y cuentan para el tope global.
+      const expiresAt = await this.demo.reserveSeat(tx);
+      const user = await tx.user.create({ data: { email, roleId: role.id, expiresAt }, select: { id: true, email: true } });
       await this.invitations.send(tx, user, role.name);
       await writeAudit(tx, 'user_created', actor.id, user.id, role.name);
       return user.id;

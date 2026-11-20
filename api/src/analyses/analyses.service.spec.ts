@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException, ServiceUnavailableException } fro
 import type { AuthUser } from '../auth/current-user.decorator.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
+import type { DemoService } from '../demo/demo.service.js';
 import type { RedisService } from '../redis/redis.service.js';
 import { AnalysesService, MAX_ANALYSES_PER_ACCOUNT } from './analyses.service.js';
 import type { ResultsStorage } from './results-storage.js';
@@ -35,8 +36,10 @@ function build(opts: { upload?: unknown; count?: number; analysis?: unknown; mov
   };
   const redis = { client: { xadd: vi.fn(async () => { if (opts.redisFails) throw new Error('redis caído'); return '1-0'; }) } };
   const results = { removeAll: vi.fn().mockResolvedValue(undefined), open: vi.fn().mockResolvedValue({ stream: {}, size: 3 }) };
-  const service = new AnalysesService(prisma as unknown as PrismaService, redis as unknown as RedisService, results as unknown as ResultsStorage);
-  return { service, prisma, tx, redis, results };
+  // La demo apagada: consume/refund no hacen nada (sus reglas se prueban en demo.service.spec.ts).
+  const demo = { consume: vi.fn().mockResolvedValue(undefined), refund: vi.fn().mockResolvedValue(undefined) };
+  const service = new AnalysesService(prisma as unknown as PrismaService, redis as unknown as RedisService, results as unknown as ResultsStorage, demo as unknown as DemoService);
+  return { service, prisma, tx, redis, results, demo };
 }
 
 describe('AnalysesService.create', () => {
@@ -84,6 +87,23 @@ describe('AnalysesService.create', () => {
   it('con 10 análisis ya hechos da 409 y no crea nada', async () => {
     const { service, tx } = build({ count: MAX_ANALYSES_PER_ACCOUNT });
     await expect(service.create(USER, 'up1')).rejects.toThrow(ConflictException);
+    expect(tx.analysis.create).not.toHaveBeenCalled();
+  });
+
+  it('v1.0: el cupo de 24 h de la demo se gasta al crear, y se DEVUELVE si el análisis no llega a crearse', async () => {
+    const ok = build();
+    await ok.service.create(USER, 'up1');
+    expect(ok.demo.consume).toHaveBeenCalledWith('analyses', 'u1');
+    expect(ok.demo.refund).not.toHaveBeenCalled();
+    const full = build({ count: MAX_ANALYSES_PER_ACCOUNT });
+    await expect(full.service.create(USER, 'up1')).rejects.toThrow(ConflictException);
+    expect(full.demo.refund).toHaveBeenCalledWith('analyses', 'u1');
+  });
+
+  it('v1.0: sin cupo (429 de la demo) no se crea nada', async () => {
+    const { service, tx, demo } = build();
+    demo.consume.mockRejectedValueOnce(new Error('tope'));
+    await expect(service.create(USER, 'up1')).rejects.toThrow('tope');
     expect(tx.analysis.create).not.toHaveBeenCalled();
   });
 

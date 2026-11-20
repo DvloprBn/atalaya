@@ -5,6 +5,7 @@ import { AdminModule } from './admin/admin-users.controller.js';
 import { AnalysesModule } from './analyses/analyses.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule } from './auth/auth.module.js';
+import { DemoModule } from './demo/demo.controller.js';
 import { LoggingThrottlerGuard } from './security/logging-throttler.guard.js';
 import { SecurityModule } from './security/security.module.js';
 import { RolesGuard } from './common/auth/roles.guard.js';
@@ -26,6 +27,7 @@ import { UploadsModule } from './uploads/uploads.controller.js';
     RedisModule,
     SecurityModule,
     MailModule,
+    DemoModule,
     AuthModule,
     AdminModule,
     UploadsModule,

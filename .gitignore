@@ -10,6 +10,8 @@ datos-ejemplo/cfdi-uno.xml
 datos-ejemplo/manifiesto-cfdi.json
 datos-ejemplo/reporte-ventas.pdf
 datos-ejemplo/manifiesto-pdf.json
+# v1.0 · La copia que el frontend ofrece para descargar (scripts/preparar-ejemplos.sh).
+web/public/ejemplos/
 
 # Producción: secretos y configuración real (S-1). Nunca al repo.
 secrets/

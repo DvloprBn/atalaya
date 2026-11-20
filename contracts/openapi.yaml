@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
   title: Atalaya API
-  version: 0.12.0
+  version: 1.0.0
   license:
     name: MIT
     identifier: MIT
@@ -33,28 +33,50 @@ paths:
               schema: { $ref: "#/components/schemas/HealthReport" }
         "429":
           description: Se superó el tope de peticiones
+  /demo:
+    get:
+      operationId: getDemo
+      summary: ¿Es esto la demo de 24 h? Y sus límites (v1.0)
+      description: >
+        Público: el registro y la subida lo necesitan antes de tener cuenta. Sin demo, `enabled` es false y `limits` null.
+        Nunca dice cuántas cuentas hay ni cuánto falta para llenar el tope global.
+      security: []
+      responses:
+        "200":
+          description: La configuración de la demo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DemoInfo" }
+        "429":
+          description: Se superó el tope de peticiones
   /auth/register:
     post:
       operationId: register
       summary: Pide crear una cuenta (manda un enlace de verificación)
       description: |
         Misma respuesta exista o no la cuenta. La cuenta NO se crea aquí: nace al abrir el enlace.
-        Tope: 5 por IP cada 15 min.
+        Tope: 5 por IP cada 15 min. En la demo (v1.0), 503 si el tope global de cuentas de prueba está lleno
+        (no dice nada de ninguna cuenta).
       security: []
       requestBody: { $ref: "#/components/requestBodies/Register" }
       responses:
         "202": { $ref: "#/components/responses/CheckYourEmail" }
         "400": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /auth/verify-email:
     post:
       operationId: verifyEmail
       summary: Abre el enlace de registro y crea la cuenta (un solo uso)
+      description: >
+        En la demo (v1.0) la cuenta nace con su fecha de borrado (`expiresAt`, 24 h). Si el tope global de cuentas de
+        prueba está lleno, 503 y el enlace NO se gasta: sirve para reintentar mientras no venza.
       security: []
       requestBody: { $ref: "#/components/requestBodies/Token" }
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /auth/login:
     post:
       operationId: login
@@ -265,7 +287,8 @@ paths:
         Nunca devuelve JSON ni detalles: siempre redirige. Éxito sin 2FA: `/cuenta` con las cookies de sesión.
         Éxito con 2FA: `/login#challenge=…` (el reto va en el fragmento, que no viaja al servidor ni en Referer).
         Cualquier fallo (state, cookie, PKCE, firma, emisor, audiencia, nonce, caducidad, correo no verificado,
-        cuenta desactivada…): `/login?error=google`, sin decir cuál.
+        cuenta desactivada o vencida…): `/login?error=google`, sin decir cuál. Demo llena (v1.0, no es un rechazo):
+        `/login?error=demo_llena`.
       security: []
       parameters:
         - { name: code, in: query, required: false, schema: { type: string, maxLength: 2048 } }
@@ -273,7 +296,7 @@ paths:
         - { name: error, in: query, required: false, schema: { type: string, maxLength: 128 } }
       responses:
         "302":
-          description: Redirige a `/cuenta`, a `/login#challenge=…` o a `/login?error=google`
+          description: Redirige a `/cuenta`, a `/login#challenge=…`, a `/login?error=google` o a `/login?error=demo_llena`
           headers:
             Location: { schema: { type: string } }
   /auth/accept-invite:
@@ -509,7 +532,9 @@ paths:
       operationId: createUpload
       summary: Sube un archivo (CSV, XLSX, un CFDI en XML, un ZIP de CFDI o un PDF con una tabla) y lo encola para su revisión
       description: >
-        multipart/form-data con UN solo campo `file`. Revisión en dos tiempos. **En la API, antes de guardar nada:**
+        multipart/form-data con UN campo `file` y, en la demo (v1.0), la casilla `noRealData=true` («Confirmo que no
+        contiene datos reales de personas»), obligatoria (400 sin ella). En la demo, además, 30 subidas por cuenta cada
+        24 h (429; borrar un archivo no devuelve el cupo). Revisión en dos tiempos. **En la API, antes de guardar nada:**
         tamaño máximo 5 MB (413), tipo por la FIRMA de los primeros bytes y no por la extensión ni el Content-Type
         (415 si no es CSV, XLSX, XML, ZIP ni PDF, o si la firma no coincide con la extensión), nombre de archivo ignorado como ruta
         (se guarda con un nombre generado), y máximo 10 archivos por cuenta (409). Los `.xlsm`, `.xlsb`, `.xls` y
@@ -603,7 +628,7 @@ paths:
         Paso 1 de 2: el worker lee el archivo y devuelve una VISTA PREVIA (columnas, ejemplos y un mapeo sugerido);
         el análisis queda en `awaiting_mapping` hasta que la persona confirme las columnas con `putAnalysisMapping`.
         404 si el archivo no existe O es de otra cuenta; 409 si el archivo no está `accepted` o si ya hay
-        10 análisis en la cuenta.
+        10 análisis en la cuenta. En la demo (v1.0), 20 análisis por cuenta cada 24 h (429; borrar uno no devuelve el cupo).
       requestBody:
         required: true
         content:
@@ -836,11 +861,34 @@ components:
     PublicUser:
       type: object
       additionalProperties: false
-      required: [id, email, role]
+      required: [id, email, role, expiresAt]
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         role: { $ref: "#/components/schemas/Role" }
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+          description: v1.0 · Demo — cuándo se borra la cuenta con todo lo suyo. null = cuenta permanente.
+    DemoInfo:
+      type: object
+      additionalProperties: false
+      required: [enabled, accountHours, limits]
+      properties:
+        enabled: { type: boolean }
+        accountHours: { type: number, minimum: 0, maximum: 24, description: "Vida de una cuenta de prueba (0 sin demo)" }
+        limits:
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [files, megabytes, rows, uploadsPerDay, analysesPerDay]
+              properties:
+                files: { type: integer, description: "Archivos a la vez por cuenta" }
+                megabytes: { type: integer, description: "Tamaño máximo de un archivo" }
+                rows: { type: integer, description: "Filas máximas por archivo" }
+                uploadsPerDay: { type: integer }
+                analysesPerDay: { type: integer }
     LoginSuccess:
       type: object
       additionalProperties: false
@@ -1100,6 +1148,10 @@ components:
       required: [file]
       properties:
         file: { type: string, format: binary, description: "CSV, XLSX, XML (CFDI), ZIP de CFDI o PDF; máximo 5 MB" }
+        noRealData:
+          type: string
+          enum: ["true", "false"]
+          description: v1.0 · La casilla de la demo («Confirmo que no contiene datos reales de personas»), obligatoria en la demo.
     UploadStatus:
       type: string
       enum: [queued, checking, accepted, rejected]

@@ -21,6 +21,10 @@
 
 	# Las respuestas de la API (sesiones, datos de la cuenta) nunca se guardan en cachés.
 	header /api/* Cache-Control "no-store"
+	# La API solo devuelve JSON y archivos: su CSP es «nada de nada» (OWASP REST Security). Si un navegador llegara a
+	# pintar una respuesta suya como página, no ejecuta ni carga nada, y nadie puede meterla en un marco. La de las
+	# páginas (con nonce) la pone web/src/proxy.ts; esta no se pisa con aquella porque cada una cubre sus rutas.
+	header /api/* Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 
 	# Páginas que reciben un token en la URL (enlaces de correo): el token no debe
 	# salir en la cabecera Referer hacia ningún otro sitio (lección: rutas por token).

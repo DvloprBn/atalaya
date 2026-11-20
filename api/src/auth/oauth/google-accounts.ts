@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { loadEnv } from '../../config/env.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import { isExpired } from '../../demo/account-expiry.js';
+import { DemoService } from '../../demo/demo.service.js';
 import { MailService } from '../../mail/mail.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { DEFAULT_ROLE_ID } from '../constants.js';
@@ -30,6 +32,7 @@ export class OAuthAccounts {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly demo: DemoService,
   ) {}
 
   async resolve(claims: IdTokenClaims): Promise<{ userId: string; outcome: Outcome }> {
@@ -46,19 +49,19 @@ export class OAuthAccounts {
   private async resolveOnce({ sub, email }: IdTokenClaims): Promise<{ userId: string; outcome: Outcome }> {
     const identity = await this.prisma.oAuthIdentity.findUnique({
       where: { provider_subject: { provider: PROVIDER, subject: sub } },
-      select: { user: { select: { id: true, disabledAt: true } } },
+      select: { user: { select: { id: true, disabledAt: true, expiresAt: true } } },
     });
     if (identity) {
-      if (identity.user.disabledAt) throw new OAuthError('account_denied');
+      if (identity.user.disabledAt || isExpired(identity.user)) throw new OAuthError('account_denied');
       return { userId: identity.user.id, outcome: 'login' };
     }
 
     const existing = await this.prisma.user.findUnique({
       where: { email },
-      select: { id: true, disabledAt: true, emailVerifiedAt: true, oauthIdentities: { where: { provider: PROVIDER }, select: { id: true } } },
+      select: { id: true, disabledAt: true, expiresAt: true, emailVerifiedAt: true, oauthIdentities: { where: { provider: PROVIDER }, select: { id: true } } },
     });
     if (existing) {
-      if (existing.disabledAt || !existing.emailVerifiedAt || existing.oauthIdentities.length > 0) {
+      if (existing.disabledAt || isExpired(existing) || !existing.emailVerifiedAt || existing.oauthIdentities.length > 0) {
         throw new OAuthError('account_denied');
       }
       // La identidad y el aviso al dueño se guardan juntos o ninguno.
@@ -70,7 +73,8 @@ export class OAuthAccounts {
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({ data: { email, emailVerifiedAt: new Date(), roleId: DEFAULT_ROLE_ID }, select: { id: true } });
+      const expiresAt = await this.demo.reserveSeat(tx); // demo: nace con fecha de borrado (o 503 si está llena)
+      const user = await tx.user.create({ data: { email, emailVerifiedAt: new Date(), roleId: DEFAULT_ROLE_ID, expiresAt }, select: { id: true } });
       await tx.oAuthIdentity.create({ data: { userId: user.id, provider: PROVIDER, subject: sub, email } });
       return user;
     });

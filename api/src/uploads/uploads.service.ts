@@ -13,14 +13,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { manageableLevels } from '../admin/hierarchy.js';
 import type { AuthUser } from '../auth/current-user.decorator.js';
 import { ResultsStorage } from '../analyses/results-storage.js';
+import { DemoService } from '../demo/demo.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { checkSignature, displayNameOf } from './file-signature.js';
 import { toAdminUpload, toUpload } from './upload-view.js';
 import { UploadStorage } from './upload-storage.js';
+import { MAX_FILES_PER_ACCOUNT } from './limits.js';
 
-export const MAX_BYTES = 5 * 1024 * 1024; // el mismo 5 MB del contrato y del CHECK de la base
-export const MAX_FILES_PER_ACCOUNT = 10;
+export { MAX_BYTES, MAX_FILES_PER_ACCOUNT } from './limits.js';
 /** La cola (Redis Stream). El mensaje lleva SOLO el id: el worker lee el resto de la base y los bytes del volumen. */
 export const UPLOAD_STREAM = 'atalaya:uploads';
 const PAGE_SIZE = 20;
@@ -36,6 +37,7 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
     private readonly redis: RedisService,
     private readonly storage: UploadStorage,
     private readonly results: ResultsStorage,
+    private readonly demo: DemoService,
   ) {}
 
   onModuleInit() {
@@ -47,12 +49,26 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
     clearInterval(this.timer);
   }
 
-  async create(user: AuthUser, file: Express.Multer.File | undefined) {
+  async create(user: AuthUser, file: Express.Multer.File | undefined, noRealData = false) {
     if (!file) throw new BadRequestException('Falta el archivo (campo «file»)');
     if (file.size === 0) throw new BadRequestException('El archivo está vacío');
+    // v1.0 · En la demo, la casilla es obligatoria y la exige la API (la pantalla sola se salta con curl).
+    if (this.demo.enabled && !noRealData) {
+      throw new BadRequestException('Confirma que el archivo no contiene datos reales de personas (campo «noRealData»)');
+    }
     const verdict = checkSignature(file.originalname, file.buffer);
     if (!verdict.ok) throw new UnsupportedMediaTypeException(verdict.message);
+    // Cupo de 24 h de la demo: se gasta aquí, ya con un archivo válido; si la subida no llega a ocurrir, se devuelve.
+    await this.demo.consume('uploads', user.id);
+    try {
+      return await this.store(user, file, verdict.kind);
+    } catch (error) {
+      await this.demo.refund('uploads', user.id);
+      throw error;
+    }
+  }
 
+  private async store(user: AuthUser, file: Express.Multer.File, kind: string) {
     const storageKey = randomUUID().replaceAll('-', ''); // el nombre en disco lo pone el servidor
     await this.storage.save(storageKey, file.buffer);
 
@@ -68,7 +84,7 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
         return tx.upload.create({
           data: {
             ownerId: user.id,
-            kind: verdict.kind,
+            kind,
             displayName: displayNameOf(file.originalname),
             sizeBytes: file.size,
             sha256: createHash('sha256').update(file.buffer).digest('hex'),

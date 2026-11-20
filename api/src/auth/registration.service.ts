@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { loadEnv } from '../config/env.js';
+import { DemoService } from '../demo/demo.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DEFAULT_ROLE_ID } from './constants.js';
@@ -24,12 +25,15 @@ export class RegistrationService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly limits: RateLimits,
+    private readonly demo: DemoService,
   ) {}
 
   /** Siempre termina igual hacia fuera; lo que pasó se le cuenta al dueño del correo, por correo. */
   async register(email: string, password: string): Promise<void> {
     const problem = passwordProblem(password, email);
     if (problem) throw new BadRequestException(problem);
+    // Demo llena: se dice de frente y antes de mandar un correo cuyo enlace no serviría. No revela nada de nadie.
+    await this.demo.assertNotFull(this.prisma);
     // El hash se calcula SIEMPRE, exista o no la cuenta: mismo trabajo, mismo tiempo.
     const passwordHash = await hashPassword(password);
     if (!(await this.limits.allowMailTo(email, 'register'))) return; // tope por destinatario, en silencio
@@ -69,8 +73,10 @@ export class RegistrationService {
 
         const exists = await tx.user.findUnique({ where: { email: row.email }, select: { id: true } });
         if (!exists) {
+          // Demo: la cuenta nace con su fecha de borrado; si está llena, todo se deshace y el enlace sigue sirviendo.
+          const expiresAt = await this.demo.reserveSeat(tx);
           await tx.user.create({
-            data: { email: row.email, passwordHash: row.passwordHash, emailVerifiedAt: now, roleId: DEFAULT_ROLE_ID },
+            data: { email: row.email, passwordHash: row.passwordHash, emailVerifiedAt: now, roleId: DEFAULT_ROLE_ID, expiresAt },
           });
         }
         // Los demás enlaces de registro de este correo dejan de servir.

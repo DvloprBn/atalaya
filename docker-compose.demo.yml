@@ -1,0 +1,12 @@
+# v1.0 · La demo de 24 h en LOCAL, para probarla (se combina con docker-compose.yml):
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d api && (cd api && npm run test:e2e -- demo)
+# Para volver al modo normal: docker compose up -d api (sin este archivo).
+#
+# La vida de una cuenta baja de 24 h a 90 s y el tope global a 3 cuentas, para recorrer el vencimiento, el barrido y
+# la demo llena en minutos. En producción la API exige 24 h y no arranca con otra cifra (api/src/config/demo-env.ts).
+services:
+  api:
+    environment:
+      DEMO_MODE: "true"
+      DEMO_ACCOUNT_TTL_S: "90"
+      DEMO_MAX_ACCOUNTS: "3"

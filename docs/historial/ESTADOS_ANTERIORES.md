@@ -1,5 +1,17 @@
 # Estados anteriores de Atalaya
 
+### ESTADO VIVO de la mañana del 2026-11-20 (v1.0 a medias: producción, 2FA)
+
+**Situación:** v1.0 a medias en `fase/v1.0-produccion` (commits `88fe564`, `c764973`, `43dd155`, `49cb924` y el del cierre), **subida a `origin` en el cierre del 2026-11-20**; `main` sigue en v0.12. El PR y el CI de la rama se abren al terminar la fase (demo y ZAP). Diseño y decisiones de hoy en `DECISIONES.md` (sección 2026-11-20).
+**Hecho en v1.0 (2026-11-20):** `docker-compose.prod.yml` con secretos en archivos, ACL de Redis e imágenes de producción en solo lectura (S-1, S-3, S-4, S-5); contraseñas comunes rechazadas (S-8); CSP con nonce en bloqueo en producción (S-2); rotación de la llave del 2FA con ensayo en vivo (S-9); recuperación asistida del 2FA: admin + 48 h + correo para cancelar (S-10). Laboratorios `v1.0-rotacion-totp` y `v1.0-recuperacion-2fa`.
+**Pruebas (2026-11-20):** worker 352 (sin cambios) · API 350 · e2e 162 · Chrome 42 (+1 omitida a propósito) · stack de producción levantado en local (registro → exportación; ninguna contraseña en `docker inspect`; XSS reflejado bloqueado) · fallas sembradas detectadas (S-3, S-9 «compara y cambia»). CI de la rama: no corrido aún (corre con el PR).
+**Siguiente:** la **demo de 24 h** (`PLAN_DESARROLLO.md` §6), luego **ZAP**; después el PR de la fase con su CI.
+**Bloqueos:** ninguno técnico. El dueño revisa el proceso humano de S-10 (S-18).
+**Pendientes** (en `PENDIENTES.md`): S-6, S-11 a S-13, S-16 a S-18, H-1 a H-4, D-1 a D-4, P-1, P-2.
+**Ojo al probar:** (1) entre dos corridas completas, `docker compose restart api` (tope en memoria, S-6); el CI no reinicia entre el smoke y las e2e. (2) Antes de una e2e, `docker compose up -d --build api worker`; tras cambiar dependencias, `--renew-anon-volumes`. (3) `.env` con `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD`; `TOTP_ENCRYPTION_KEYS_OLD` vacío salvo durante una rotación. (4) En desarrollo el restablecimiento del 2FA se aplica a los **30 s** (`TWO_FACTOR_RESET_DELAY_S`); en una e2e el admin usa **códigos de recuperación**, porque con TOTP la ventana de 3 pasos se agota. (5) El stack de producción se prueba aparte (`-p atalaya-prod`, puerto 3090, `scripts/crear-secretos.sh`, un Mailpit desechable en su red) y se desmonta con `down -v` y borrando `secrets/`.
+
+---
+
 > Aquí bajan los «ESTADO VIVO» que se reescriben al cerrar cada sesión; el más reciente va **arriba**.
 
 ## Reescrito el 2026-11-19 (ESTADO VIVO corto del cierre de v0.12)

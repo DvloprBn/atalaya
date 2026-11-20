@@ -92,7 +92,7 @@ export class AuthController {
 
   @Get('me')
   me(@CurrentUser() user: AuthUser): PublicUser {
-    return { id: user.id, email: user.email, role: user.role };
+    return { id: user.id, email: user.email, role: user.role, expiresAt: user.expiresAt };
   }
 
   @Public()

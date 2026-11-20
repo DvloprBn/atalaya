@@ -1,5 +1,6 @@
 // Lee la configuración del entorno UNA vez y se niega a arrancar si falta algo.
 // Fallar al arrancar es mejor que fallar a media petición con un error confuso.
+import { type DemoConfig, loadDemo } from './demo-env.js';
 
 /** Un proveedor OpenID Connect (Google). Los endpoints vienen del entorno, nunca de lo que escribe un visitante. */
 export interface OAuthConfig {
@@ -40,6 +41,8 @@ export interface Env {
   twoFactorResetDelayS: number;
   /** null = el login con Google no está configurado (las rutas responden 404). */
   oauth: OAuthConfig | null;
+  /** v1.0 · null = sin demo (cuentas permanentes). Ver demo-env.ts. */
+  demo: DemoConfig | null;
 }
 
 /** S-10: la espera decidida por el dueño (2026-11-20): 48 horas. */
@@ -67,6 +70,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // SOLO desarrollo y CI lo bajan (segundos), para probar la aplicación sin esperar dos días. Ver la validación abajo.
     twoFactorResetDelayS: Number(source.TWO_FACTOR_RESET_DELAY_S ?? TWO_FACTOR_RESET_DELAY_S),
     oauth: loadOAuth(source),
+    demo: loadDemo(source),
   };
   if (!Number.isInteger(env.port) || env.port <= 0) {
     throw new Error('PORT debe ser un entero positivo');

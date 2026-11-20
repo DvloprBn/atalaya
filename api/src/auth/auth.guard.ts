@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { IS_PUBLIC } from '../common/auth/public.decorator.js';
+import { notExpired } from '../demo/account-expiry.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ACCESS_COOKIE } from './cookies.js';
 import type { AuthUser } from './current-user.decorator.js';
@@ -45,9 +46,9 @@ export class AuthGuard implements CanActivate {
         userId: claims.sub,
         revokedAt: null,
         expiresAt: { gt: new Date() },
-        user: { disabledAt: null },
+        user: { disabledAt: null, ...notExpired() }, // v1.0: una cuenta de la demo vencida, como desactivada
       },
-      select: { user: { select: { id: true, email: true, role: { select: { name: true, level: true } } } } },
+      select: { user: { select: { id: true, email: true, expiresAt: true, role: { select: { name: true, level: true } } } } },
     });
     if (!session) throw new UnauthorizedException();
 

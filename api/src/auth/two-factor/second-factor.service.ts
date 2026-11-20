@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { notExpired } from '../../demo/account-expiry.js';
 import type { SessionCookies } from '../cookies.js';
 import type { PublicUser } from '../auth.service.js';
 import { RateLimits } from '../rate-limits.js';
@@ -56,8 +57,8 @@ export class SecondFactorService {
     await this.resets.ownerProvedFactor(userId); // S-10: si había una solicitud de quitarle el 2FA, se cae sola
 
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, disabledAt: null },
-      select: { id: true, email: true, role: { select: { name: true, level: true } } },
+      where: { id: userId, disabledAt: null, ...notExpired() },
+      select: { id: true, email: true, expiresAt: true, role: { select: { name: true, level: true } } },
     });
     if (!user) return null;
     return { tokens: await this.sessions.start(user.id), user };

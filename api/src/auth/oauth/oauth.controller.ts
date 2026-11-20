@@ -1,4 +1,4 @@
-import { Controller, Get, Logger, NotFoundException, Query, Req, Res } from '@nestjs/common';
+import { Controller, Get, Logger, NotFoundException, Query, Req, Res, ServiceUnavailableException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { Public } from '../../common/auth/public.decorator.js';
@@ -19,6 +19,8 @@ const MIN = 60_000;
 // Destinos FIJOS: la respuesta nunca redirige a nada que venga de la petición (sin "open redirect").
 const OK = '/cuenta';
 const FAILED = '/login?error=google';
+/** v1.0 · Demo llena: no es un rechazo ni un ataque, y no dice nada de la cuenta; se avisa tal cual. */
+const DEMO_FULL = '/login?error=demo_llena';
 
 @Controller('auth')
 export class OAuthController {
@@ -62,6 +64,7 @@ export class OAuthController {
       setSessionCookies(res, result.tokens);
       return res.redirect(302, OK);
     } catch (error) {
+      if (error instanceof ServiceUnavailableException) return res.redirect(302, DEMO_FULL);
       // Al log, el CÓDIGO del rechazo (nunca tokens ni correos). A la persona, siempre lo mismo.
       const code = error instanceof OAuthError ? error.code : 'error_inesperado';
       this.log.warn(`login con Google rechazado: ${code}`);

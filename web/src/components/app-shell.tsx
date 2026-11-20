@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { api, type PublicUser } from '@/lib/browser-api';
 import styles from './app-shell.module.css';
 import { Brand } from './brand';
+import { DemoBanner } from './demo-banner';
 
 const ADMIN_LEVEL = 3;
 
@@ -23,6 +24,7 @@ export function AppShell({ user, children }: { user: PublicUser; children: React
 
   return (
     <div className={styles.shell}>
+      {user.expiresAt && <DemoBanner expiresAt={user.expiresAt} />}
       <header className={styles.bar}>
         <Brand />
         <nav aria-label="Principal" className={styles.nav}>

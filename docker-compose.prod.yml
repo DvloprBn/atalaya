@@ -57,6 +57,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?}
       APP_ORIGIN: ${APP_ORIGIN:?define APP_ORIGIN (el origen público, sin barra final)}
       MAIL_FROM: ${MAIL_FROM:?}
+      # v1.0 · La demo de 24 h (PLAN_DESARROLLO.md §6): encendida salvo que se diga lo contrario. Tope global de cuentas
+      # de prueba vivas; la vida de una cuenta (24 h) no se configura aquí: en producción es fija.
+      DEMO_MODE: ${DEMO_MODE:-true}
+      DEMO_MAX_ACCOUNTS: ${DEMO_MAX_ACCOUNTS:-50}
       # Google real (S-12): sin estas cinco (y el secreto oauth_client_secret), el login con Google queda apagado (404).
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
       OAUTH_AUTH_URL: ${OAUTH_AUTH_URL:-}

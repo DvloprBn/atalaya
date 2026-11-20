@@ -37,6 +37,9 @@ model User {
   role            Role            @relation(fields: [roleId], references: [id])
   /// Cuenta desactivada: no entra y sus sesiones dejan de servir al instante.
   disabledAt      DateTime?       @map("disabled_at") @db.Timestamptz(3)
+  /// v1.0 · Demo: cuándo se borra la cuenta con todo lo suyo (alta + 24 h). null = permanente (fuera de la demo y
+  /// cuentas sembradas). Pasada la fecha ya no entra, aunque el barrido de cada 15 min todavía no la haya borrado.
+  expiresAt       DateTime?       @map("expires_at") @db.Timestamptz(3)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions        Session[]
@@ -52,6 +55,7 @@ model User {
   twoFactorResets          TwoFactorReset[] @relation("TwoFactorResetTarget")
   twoFactorResetsRequested TwoFactorReset[] @relation("TwoFactorResetActor")
 
+  @@index([expiresAt])
   @@map("users")
 }
 

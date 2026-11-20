@@ -2,9 +2,11 @@
 import { AuthShell } from '@/components/auth-shell';
 import { GoogleButton } from '@/components/google-button';
 import { api } from '@/lib/browser-api';
+import { useDemo } from '@/lib/use-demo';
 import { useForm } from '@/lib/use-form';
 
 export default function RegisterPage() {
+  const demo = useDemo();
   const { busy, result, onSubmit } = useForm(({ email, password }) => api.post('/api/auth/register', { email, password }));
 
   // Tras enviar, la pantalla dice lo mismo exista o no la cuenta: el resultado
@@ -26,6 +28,13 @@ export default function RegisterPage() {
       <div className="stack">
         <h1>Crear una cuenta</h1>
         <p className="muted">Atalaya es un proyecto de estudio: usa solo datos de prueba.</p>
+        {demo?.enabled && demo.limits && (
+          <p data-testid="demo-notice">
+            <strong>Cuenta de prueba:</strong> se borra con todo lo que subas {demo.accountHours} horas después de confirmar tu
+            correo. Hasta {demo.limits.files} archivos de {demo.limits.megabytes} MB y {demo.limits.rows.toLocaleString('es-MX')} filas,
+            y {demo.limits.analysesPerDay} análisis al día.
+          </p>
+        )}
       </div>
       <form onSubmit={onSubmit} className="stack">
         <label>
