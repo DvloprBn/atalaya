@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import './globals.css';
 
@@ -17,7 +18,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Renderizado dinámico a propósito (S-2): el nonce de la CSP es distinto en cada petición, y Next solo puede
+  // ponérselo a sus scripts al renderizar con la petición delante. Una página estática se generaría sin nonce y
+  // el navegador, con la CSP en bloqueo, no ejecutaría su JavaScript.
+  await connection();
   return (
     <html lang="es" className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <body>{children}</body>

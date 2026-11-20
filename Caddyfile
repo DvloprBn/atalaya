@@ -13,9 +13,8 @@
 		X-Frame-Options "DENY"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		Cross-Origin-Opener-Policy "same-origin"
-		# CSP primero en modo "solo reporte" (lección 48): se observa y luego se bloquea.
-		# 'unsafe-eval' solo existe porque el modo desarrollo de Next lo necesita.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri /api/csp-report"
+		# La Content-Security-Policy ya NO se pone aquí (S-2): la genera web/src/proxy.ts con un nonce distinto por petición,
+		# algo que una cabecera fija de Caddy no puede hacer. Caddy conserva el resto de cabeceras de seguridad.
 		-Server
 		-X-Powered-By
 	}
