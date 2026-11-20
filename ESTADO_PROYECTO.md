@@ -2,25 +2,26 @@
 
 > **Cómo leerlo:** el ESTADO VIVO es lo único vigente y se **reescribe** al cerrar cada sesión; el Historial solo suma filas. Pendientes en [`PENDIENTES.md`](PENDIENTES.md), decisiones en [`DECISIONES.md`](DECISIONES.md), plan en [`PLAN_DESARROLLO.md`](PLAN_DESARROLLO.md).
 
-Última actualización: **2026-11-19** (cierre: v0.12 cerrada y etiquetada)
+Última actualización: **2026-11-20** (cierre: v1.0 a medias, S-1 a S-5 y S-8 a S-10 hechos)
 
 ---
 
 ## 1. Dónde estamos
-### ESTADO VIVO (único vigente) — reescrito 2026-11-19
+### ESTADO VIVO (único vigente) — reescrito 2026-11-20
 
-**Situación:** `main` tiene hasta **v0.12** (PDF) y todas las etiquetas `v0.1`–`v0.12` (`v0.12` en `16e307d`, PR #11 fusionado con el CI 5/5). `gh` está instalado y con sesión: PR, CI y registros (`gh run view --log-failed`) se manejan desde aquí (`gh pr edit` falla en la 2.46; usar `gh api`). Detalle de v0.12 en `docs/historial/ESTADOS_ANTERIORES.md` y su diseño en `DECISIONES.md`.
-**Hecho en v0.12:** puerta de `.pdf` en la API, lector en un proceso hijo con topes de memoria, CPU y reloj, tabla lógica con `table_skipped`, pantalla, laboratorio, capítulo y generador; el CI destapó 4 cosas, corregidas antes de fusionar (`/api/health` en una e2e, `THROTTLE_SCALE` a 15, `overrides` de `effect`, diagnóstico de contenedores si algo falla).
-**Pruebas (2026-11-19):** worker 352 · API 303 · e2e 150 · Chrome 38 · CI 5/5 · fallas sembradas detectadas (11/11 en el lector, 5/5 en la puerta).
-**Siguiente:** **v1.0** según `PLAN_DESARROLLO.md` (demo de 24 h, compose de producción, CSP en bloqueo, ZAP; ahí caen S-1 a S-5 y S-8 a S-10).
-**Bloqueos:** ninguno técnico. Google de verdad necesita un cliente OAuth que crea el dueño (opcional, S-12).
-**Pendientes** (en `PENDIENTES.md`): D-1 a D-4, H-2, P-1, P-2 y los de seguridad S-1 a S-13.
-**Ojo al probar:** (1) entre dos corridas completas, `docker compose restart api` (tope en memoria, S-6), pero **el CI no reinicia** entre el smoke y las e2e: una e2e no consulta `/api/health`, y para reproducir el CI no se reinicia; `THROTTLE_SCALE` es 15. (2) Antes de una e2e, `docker compose up -d --build api worker`; tras cambiar dependencias, `--renew-anon-volumes` (el volumen de `node_modules` esconde la versión nueva). (3) `.env` con `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD`. (4) Los PDF de prueba salen de `worker/tests/pdf_maker.py` y `api/test/e2e/pdf.ts`.
+**Situación:** v1.0 a medias en `fase/v1.0-produccion` (commits `88fe564`, `c764973`, `43dd155`, `49cb924` y el del cierre), **subida a `origin` en el cierre del 2026-11-20**; `main` sigue en v0.12. El PR y el CI de la rama se abren al terminar la fase (demo y ZAP). Diseño y decisiones de hoy en `DECISIONES.md` (sección 2026-11-20).
+**Hecho en v1.0 (2026-11-20):** `docker-compose.prod.yml` con secretos en archivos, ACL de Redis e imágenes de producción en solo lectura (S-1, S-3, S-4, S-5); contraseñas comunes rechazadas (S-8); CSP con nonce en bloqueo en producción (S-2); rotación de la llave del 2FA con ensayo en vivo (S-9); recuperación asistida del 2FA: admin + 48 h + correo para cancelar (S-10). Laboratorios `v1.0-rotacion-totp` y `v1.0-recuperacion-2fa`.
+**Pruebas (2026-11-20):** worker 352 (sin cambios) · API 350 · e2e 162 · Chrome 42 (+1 omitida a propósito) · stack de producción levantado en local (registro → exportación; ninguna contraseña en `docker inspect`; XSS reflejado bloqueado) · fallas sembradas detectadas (S-3, S-9 «compara y cambia»). CI de la rama: no corrido aún (corre con el PR).
+**Siguiente:** la **demo de 24 h** (`PLAN_DESARROLLO.md` §6), luego **ZAP**; después el PR de la fase con su CI.
+**Bloqueos:** ninguno técnico. El dueño revisa el proceso humano de S-10 (S-18).
+**Pendientes** (en `PENDIENTES.md`): S-6, S-11 a S-13, S-16 a S-18, H-1 a H-4, D-1 a D-4, P-1, P-2.
+**Ojo al probar:** (1) entre dos corridas completas, `docker compose restart api` (tope en memoria, S-6); el CI no reinicia entre el smoke y las e2e. (2) Antes de una e2e, `docker compose up -d --build api worker`; tras cambiar dependencias, `--renew-anon-volumes`. (3) `.env` con `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD`; `TOTP_ENCRYPTION_KEYS_OLD` vacío salvo durante una rotación. (4) En desarrollo el restablecimiento del 2FA se aplica a los **30 s** (`TWO_FACTOR_RESET_DELAY_S`); en una e2e el admin usa **códigos de recuperación**, porque con TOTP la ventana de 3 pasos se agota. (5) El stack de producción se prueba aparte (`-p atalaya-prod`, puerto 3090, `scripts/crear-secretos.sh`, un Mailpit desechable en su red) y se desmonta con `down -v` y borrando `secrets/`.
 
 ## Historial
 
 | Fecha | Qué |
 |---|---|
+| 2026-11-20 | v1.0 a medias en `fase/v1.0-produccion` (subida a `origin` en el cierre): compose de producción y secretos (S-1, S-3–S-5), contraseñas comunes (S-8), CSP con nonce en bloqueo (S-2), rotación de la llave del 2FA con ensayo en vivo sobre 63 filas (S-9) y recuperación asistida decidida por el dueño (S-10). API 350, e2e 162, Chrome 42. Hallazgos propios corregidos: la API arrancaba muda con la llave equivocada (ahora avisa), una base falsa que no podía detectar la falta del «compara y cambia», y un pendiente sin cubrir (la persona que recupera su teléfono antes de las 48 h). |
 | 2026-11-19 | Cierre de sesión: ESTADO VIVO acortado (el detalle de v0.12 bajó a `docs/historial/`), lección 265 en la Biblioteca (proceso hijo con topes, fallas sembradas, CI ≠ local, volumen anónimo, `overrides`, comprobar `gh`). |
 | 2026-11-19 | v0.12 cerrada: PR #11 fusionado con el CI 5/5 y etiqueta `v0.12` en `16e307d`. Antes de fusionar, el CI destapó 4 cosas, corregidas en la rama: la e2e de la bomba contra `/api/health` (429 tras el smoke), el tope de subidas (`THROTTLE_SCALE` a 15), GHSA-7589-6fvf-x4pw en `effect` (`overrides`, H-2) y una API muda sin reproducir (P-2; el CI ahora imprime su estado). Corregida la nota vieja «no hay `gh`»: sí está instalado y con sesión. |
 | 2026-11-19 | v0.12 construida y verificada en `fase/v0.12-pdf`: contrato 0.12.0 y migración `pdf_kinds`, puerta de `.pdf` en la API, lector de PDF en un proceso hijo con topes (memoria, CPU, reloj) y tabla lógica, pantalla, laboratorio, capítulo y generador. Worker 352, API 303, e2e 150, Chrome 38; fallas sembradas detectadas. Commits locales; falta subir, PR, CI, fusionar y etiqueta. |

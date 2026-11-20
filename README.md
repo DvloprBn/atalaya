@@ -39,6 +39,18 @@ docker compose exec api npx prisma db seed          # cuentas de prueba: <rol>@e
 
 Abre <http://localhost:3070> (**con `localhost`**: el login con Google ata el intento a la cookie de ese host). Los correos de desarrollo llegan a Mailpit: <http://localhost:3071>. «Continuar con Google» usa un servidor OAuth **de prueba** (<http://localhost:3072>); para usar Google de verdad, ver el capítulo v0.6 de la guía. Todo escucha solo en `127.0.0.1`.
 
+### Producción (v1.0, en construcción)
+
+Un compose aparte, que **no** se combina con el de desarrollo: imágenes de producción, todos los contenedores en solo lectura, imágenes de terceros fijadas por digest, y **ninguna contraseña en el entorno**: viven en `secrets/` (fuera del repo) y se arman dentro de cada proceso.
+
+```bash
+./scripts/crear-secretos.sh             # una vez: secrets/ con valores aleatorios propios (respalda aparte la llave del 2FA)
+cp env.prod.example .env.prod           # solo lo NO secreto (origen público, remitente)
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+La API se niega a arrancar en producción con valores de ejemplo, con topes aflojados o con una espera del restablecimiento del 2FA distinta de 48 h. Rotar la llave del 2FA: `docs/laboratorio/v1.0-rotacion-totp.md`. TLS y dominio se deciden al desplegar.
+
 ## Pruebas
 
 | Comando | Qué prueba |

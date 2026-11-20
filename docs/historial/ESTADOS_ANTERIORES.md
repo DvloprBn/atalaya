@@ -2,6 +2,16 @@
 
 > Aquí bajan los «ESTADO VIVO» que se reescriben al cerrar cada sesión; el más reciente va **arriba**.
 
+## Reescrito el 2026-11-19 (ESTADO VIVO corto del cierre de v0.12)
+
+**Situación:** `main` tiene hasta **v0.12** (PDF) y todas las etiquetas `v0.1`–`v0.12` (`v0.12` en `16e307d`, PR #11 fusionado con el CI 5/5). `gh` está instalado y con sesión: PR, CI y registros (`gh run view --log-failed`) se manejan desde aquí (`gh pr edit` falla en la 2.46; usar `gh api`). Detalle de v0.12 en `docs/historial/ESTADOS_ANTERIORES.md` y su diseño en `DECISIONES.md`.
+**Hecho en v0.12:** puerta de `.pdf` en la API, lector en un proceso hijo con topes de memoria, CPU y reloj, tabla lógica con `table_skipped`, pantalla, laboratorio, capítulo y generador; el CI destapó 4 cosas, corregidas antes de fusionar (`/api/health` en una e2e, `THROTTLE_SCALE` a 15, `overrides` de `effect`, diagnóstico de contenedores si algo falla).
+**Pruebas (2026-11-19):** worker 352 · API 303 · e2e 150 · Chrome 38 · CI 5/5 · fallas sembradas detectadas (11/11 en el lector, 5/5 en la puerta).
+**Siguiente:** **v1.0** según `PLAN_DESARROLLO.md` (demo de 24 h, compose de producción, CSP en bloqueo, ZAP; ahí caen S-1 a S-5 y S-8 a S-10).
+**Bloqueos:** ninguno técnico. Google de verdad necesita un cliente OAuth que crea el dueño (opcional, S-12).
+**Pendientes** (en `PENDIENTES.md`): D-1 a D-4, H-2, P-1, P-2 y los de seguridad S-1 a S-13.
+**Ojo al probar:** (1) entre dos corridas completas, `docker compose restart api` (tope en memoria, S-6), pero **el CI no reinicia** entre el smoke y las e2e: una e2e no consulta `/api/health`, y para reproducir el CI no se reinicia; `THROTTLE_SCALE` es 15. (2) Antes de una e2e, `docker compose up -d --build api worker`; tras cambiar dependencias, `--renew-anon-volumes` (el volumen de `node_modules` esconde la versión nueva). (3) `.env` con `WORKER_REDIS_PASSWORD` y `WORKER_DB_PASSWORD`. (4) Los PDF de prueba salen de `worker/tests/pdf_maker.py` y `api/test/e2e/pdf.ts`.
+
 ## Reescrito el 2026-11-19 (cierre de sesión: v0.12 cerrada, detalle completo)
 
 **Situación:** **v0.12 cerrada (2026-11-19).** PR #11 fusionado en `main` (`49207a6`) con el CI **5/5** y etiqueta `v0.12` en `16e307d` (anotada y subida); `main` tiene hasta v0.12, con las etiquetas `v0.1`–`v0.12`. **`gh` sí está instalado y con sesión** (cuenta del dueño): el PR, su CI y sus registros (`gh run view --log-failed`) se manejan desde aquí; `gh pr edit` falla con la 2.46 (choca con «Projects classic»), y `gh api` lo resuelve. El detalle de v0.11 está en `docs/historial/ESTADOS_ANTERIORES.md`.
