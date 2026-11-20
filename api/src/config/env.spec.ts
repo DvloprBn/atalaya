@@ -42,6 +42,17 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...complete, NODE_ENV: 'production' }).throttleScale).toBe(1);
   });
 
+  it('S-3: en producción rechaza valores de ejemplo (con 32+ caracteres que pasarían el resto) y no muestra el valor', () => {
+    const example = 'cambia-esto-por-64-caracteres-aleatorios-de-openssl-rand-hex-32';
+    expect(() => loadEnv({ ...complete, JWT_SECRET: example, NODE_ENV: 'production' })).toThrow('JWT_SECRET conserva');
+    expect(() => loadEnv({ ...complete, JWT_SECRET: example, NODE_ENV: 'production' })).not.toThrow(example);
+    expect(() => loadEnv({ ...complete, REDIS_URL: 'redis://:cambia-esto-tambien@redis:6379', NODE_ENV: 'production' })).toThrow('REDIS_URL');
+    expect(() => loadEnv({ ...complete, DATABASE_URL: 'postgresql://u:cambia-esto-por-una@db/x', NODE_ENV: 'production' })).toThrow('DATABASE_URL');
+    // En desarrollo el ejemplo sigue valiendo (es el flujo de «copia .env.example y arranca»).
+    expect(loadEnv({ ...complete, JWT_SECRET: example }).jwtSecret).toBe(example);
+    expect(loadEnv({ ...complete, NODE_ENV: 'production' }).port).toBe(3000);
+  });
+
   describe('OAuth (login con Google)', () => {
     const oauth = {
       OAUTH_CLIENT_ID: 'id', OAUTH_CLIENT_SECRET: 's', OAUTH_ISSUER: 'https://accounts.google.com',

@@ -10,3 +10,7 @@ datos-ejemplo/cfdi-uno.xml
 datos-ejemplo/manifiesto-cfdi.json
 datos-ejemplo/reporte-ventas.pdf
 datos-ejemplo/manifiesto-pdf.json
+
+# Producción: secretos y configuración real (S-1). Nunca al repo.
+secrets/
+.env.prod

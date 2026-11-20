@@ -1,0 +1,212 @@
+# Atalaya en PRODUCCIÓN. Se usa SOLO (no se combina con docker-compose.yml):
+#   ./scripts/crear-secretos.sh                        # una vez: crea secrets/ con valores aleatorios propios
+#   cp env.prod.example .env.prod                     # lo NO secreto (origen público, remitente…)
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# Diferencias con desarrollo, todas a propósito:
+#   · S-4: las imágenes de terceros van fijadas por DIGEST. Una etiqueta (`postgres:18-alpine`) cambia sin avisar;
+#     un digest, no. Se actualizan a mano (docker buildx imagetools inspect <imagen>) y con una revisión.
+#   · S-5: NINGÚN contenedor escribe en su propio disco (read_only). Lo que necesita escribir tiene un volumen
+#     o un tmpfs (en memoria, que se borra al reiniciar) nombrado aquí abajo.
+#   · S-1: NINGUNA contraseña en `environment:` ni en `command:` (se verían con `docker inspect` y `ps`). Viven en
+#     archivos de secrets/, que Docker monta en /run/secrets SOLO en el servicio que los necesita; scripts/arranque-prod.sh
+#     arma con ellos las URLs dentro del proceso. Redis usa un archivo ACL con hashes, generado en memoria al arrancar.
+#   · Sin Mailpit ni servidor OAuth falso, sin código montado, sin THROTTLE_SCALE y sin puertos extra.
+
+name: atalaya-prod
+
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+  restart: unless-stopped
+
+# El script que arma las variables con contraseña a partir de los secretos (montado en solo lectura).
+x-arranque: &arranque ./scripts/arranque-prod.sh:/arranque.sh:ro
+
+services:
+  caddy:
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    <<: *hardening
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - "127.0.0.1:${ATALAYA_PORT:-3070}:80"   # solo esta máquina; el TLS y el dominio se deciden al desplegar
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    tmpfs: [/data, /config]            # Caddy guarda ahí estado propio; sin TLS propio aún no hay nada que conservar
+    depends_on: [web, api]
+    networks: [edge]
+
+  web:
+    build: { context: ./web, dockerfile: Dockerfile, target: runtime }
+    <<: *hardening
+    environment:
+      API_INTERNAL_URL: http://api:3000
+      CSP_ENFORCE: "1"                 # S-2: en producción la CSP BLOQUEA (en desarrollo solo reporta)
+    tmpfs: [/tmp, "/app/.next/cache:uid=1000,gid=1000"]   # caché en memoria de Next, que escribe en ejecución
+    depends_on: [api]
+    networks: [edge]
+
+  api:
+    build: { context: ./api, dockerfile: Dockerfile, target: runtime }
+    <<: *hardening
+    command: ["sh", "/arranque.sh", "node", "dist/main.js"]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      APP_ORIGIN: ${APP_ORIGIN:?define APP_ORIGIN (el origen público, sin barra final)}
+      MAIL_FROM: ${MAIL_FROM:?}
+      # Google real (S-12): sin estas cinco (y el secreto oauth_client_secret), el login con Google queda apagado (404).
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
+      OAUTH_AUTH_URL: ${OAUTH_AUTH_URL:-}
+      OAUTH_TOKEN_URL: ${OAUTH_TOKEN_URL:-}
+      OAUTH_JWKS_URL: ${OAUTH_JWKS_URL:-}
+      OAUTH_ISSUER: ${OAUTH_ISSUER:-}
+    secrets: [postgres_password, redis_password, jwt_secret, totp_encryption_key, smtp_url, oauth_client_secret]
+    tmpfs: [/tmp]
+    volumes:
+      - *arranque
+      - uploads_data:/data/uploads
+      - results_data:/data/results
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    networks: [edge, data]
+
+  # Aplica las migraciones y termina. Usa el objetivo `migrate` (lleva el CLI de Prisma; la imagen que corre, no).
+  migrate:
+    build: { context: ./api, dockerfile: Dockerfile, target: migrate }
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    restart: "no"
+    command: ["sh", "/arranque.sh", "npx", "prisma", "migrate", "deploy"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    secrets: [postgres_password]
+    tmpfs: [/tmp]
+    volumes: [*arranque]
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [data]
+
+  worker:
+    build: { context: ./worker }
+    <<: *hardening
+    command: ["sh", "/arranque.sh", "python", "-m", "atalaya_worker"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      UPLOAD_DIR: /data/uploads
+    secrets: [worker_redis_password, worker_db_password]   # NO ve la contraseña de la API ni la de la base principal
+    tmpfs: [/tmp]
+    volumes:
+      - *arranque
+      - uploads_data:/data/uploads:ro
+      - results_data:/data/results
+    mem_limit: 512m
+    pids_limit: 64
+    cpus: 1.0
+    depends_on:
+      redis: { condition: service_healthy }
+      db-roles: { condition: service_completed_successfully }
+    networks: [data]
+
+  # Pone LOGIN y contraseña al rol `atalaya_worker` (que la migración crea sin poder entrar) y termina.
+  db-roles:
+    image: postgres:18-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    restart: "no"
+    environment:
+      PGHOST: db
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      PGUSER: ${POSTGRES_USER:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      PGDATABASE: ${POSTGRES_DB:?}
+    secrets: [postgres_password, worker_db_password]
+    command:
+      - sh
+      - /arranque.sh
+      - sh
+      - -c
+      - |
+        until psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'atalaya_worker'" | grep -q 1; do sleep 2; done
+        echo "ALTER ROLE atalaya_worker LOGIN PASSWORD :'pw'" | psql -v ON_ERROR_STOP=1 -v pw="$$WORKER_DB_PASSWORD"
+    tmpfs: [/tmp]
+    volumes: [*arranque]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    networks: [data]
+
+  db:
+    image: postgres:18-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
+    <<: *hardening
+    # El arranque de la imagen entra como root, arregla el dueño del volumen y baja al usuario `postgres`:
+    # eso pide estas cuatro capacidades y ninguna más (con `cap_drop: ALL` a secas, no arranca).
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password   # la imagen lo lee de ahí: no hay contraseña en el entorno
+    secrets: [postgres_password]
+    volumes:
+      - db_data:/var/lib/postgresql
+    tmpfs: [/tmp, /run/postgresql]     # el socket y los temporales de Postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+    networks: [data]
+
+  redis:
+    image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
+    <<: *hardening
+    user: redis                        # el comando propio salta el arranque de la imagen: se baja de root aquí
+    secrets: [redis_password, worker_redis_password]
+    # Archivo ACL armado AL ARRANCAR, en memoria (/tmp es tmpfs) y con HASHES SHA-256, no contraseñas.
+    #   `default` (la API): todo, con contraseña.
+    #   `worker`: solo crear su grupo de la cola, leer y confirmar mensajes de `atalaya:uploads` y escribir su latido.
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        hash() { printf %s "$$(cat /run/secrets/$$1)" | sha256sum | cut -d' ' -f1; }
+        {
+          echo "user default on #$$(hash redis_password) ~* &* +@all"
+          echo "user worker on #$$(hash worker_redis_password) ~atalaya:uploads ~atalaya:analyses ~atalaya:worker:* -@all +xgroup|create +xreadgroup +xack +set"
+        } > /tmp/users.acl
+        exec redis-server --aclfile /tmp/users.acl
+    tmpfs: [/tmp]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli ping"]
+      interval: 5s
+      retries: 10
+    networks: [data]
+
+# Archivos de secrets/ (los crea scripts/crear-secretos.sh; la carpeta está en .gitignore).
+secrets:
+  postgres_password: { file: ./secrets/postgres_password }
+  redis_password: { file: ./secrets/redis_password }
+  worker_redis_password: { file: ./secrets/worker_redis_password }
+  worker_db_password: { file: ./secrets/worker_db_password }
+  jwt_secret: { file: ./secrets/jwt_secret }
+  totp_encryption_key: { file: ./secrets/totp_encryption_key }
+  smtp_url: { file: ./secrets/smtp_url }
+  oauth_client_secret: { file: ./secrets/oauth_client_secret }
+
+networks:
+  edge: {}
+  data:
+    internal: true
+
+volumes:
+  db_data: {}
+  redis_data: {}
+  uploads_data: {}
+  results_data: {}

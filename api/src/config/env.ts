@@ -72,6 +72,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (source.NODE_ENV === 'production' && env.throttleScale !== 1) {
     throw new Error('En producción THROTTLE_SCALE debe ser 1: los topes por IP no se aflojan');
   }
+  if (source.NODE_ENV === 'production') rejectExampleValues(source);
   if (!env.uploadDir.startsWith('/')) throw new Error('UPLOAD_DIR debe ser una ruta absoluta');
   if (!env.resultsDir.startsWith('/')) throw new Error('RESULTS_DIR debe ser una ruta absoluta');
   // Solo el origen (esquema + host + puerto), sin ruta ni barra final: se compara tal cual contra Origin.
@@ -81,6 +82,20 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   if (source === process.env) cached = env;
   return env;
+}
+
+/**
+ * S-3: en producción, un valor copiado del `.env.example` (todos empiezan por «cambia-esto») es una
+ * llave pública: cualquiera que lea el repo podría firmar sesiones. Se revisan también las URLs,
+ * que llevan las contraseñas de base y de Redis incrustadas. El mensaje nombra la variable, no el valor.
+ */
+const SECRET_VARS = ['JWT_SECRET', 'TOTP_ENCRYPTION_KEY', 'OAUTH_CLIENT_SECRET', 'DATABASE_URL', 'REDIS_URL', 'SMTP_URL'];
+function rejectExampleValues(source: NodeJS.ProcessEnv): void {
+  for (const name of SECRET_VARS) {
+    if (/cambia-esto|changeme|change-me/i.test(source[name] ?? '')) {
+      throw new Error(`En producción ${name} conserva el valor de ejemplo de .env.example: genera uno propio`);
+    }
+  }
 }
 
 function required(source: NodeJS.ProcessEnv, name: string): string {
